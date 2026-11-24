@@ -37,7 +37,7 @@
 .chip-micro { fill: #ffb276; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
 .pin { fill: none; stroke: #ffb276; stroke-width: 3.5; stroke-linecap: round; }
 .gpio-pill rect { fill: #fffaf2; stroke: #d9cbb8; stroke-width: 1; }
-.gpio-pill text { fill: #1f2430; font: 700 16px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.gpio-pill text { fill: #1f2430; font: 700 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .flow-legend { font-size: 16px; fill: #39414a; }
 .legend-input { fill: #8297a7; }
 .legend-output { fill: #b17b54; }
