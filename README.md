@@ -7,6 +7,8 @@ The real device: 8 spring-loaded keys with an RGB LED under each, a speaker, a d
 with falling notes (Guitar Hero style), a presence sensor that wakes it from deep sleep, and a servo
 treat dispenser that rewards a completed sequence or song. It talks MQTT over TLS to a web app.
 
+**Live:** https://hadih963.github.io/hungry-simon/
+
 This simulator reproduces the behaviour so the team can demo it and test game logic before the
 hardware is built.
 
