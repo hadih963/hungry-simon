@@ -18,14 +18,16 @@ export function createFlow(root, { nodes, edges }) {
   const inputNodes = nodes.filter((node) => node.side === 'in');
   const outputNodes = nodes.filter((node) => node.side === 'out' && node.id !== 'wifi');
   const positions = new Map();
-  inputNodes.forEach((node, i) => positions.set(node.id, { x: 28, y: 57 + i * 54, w: 188, h: 42 }));
-  outputNodes.forEach((node, i) => positions.set(node.id, { x: 730, y: 62 + i * 62, w: 146, h: 50 }));
+  const outputGap = Math.min(62, 250 / Math.max(1, outputNodes.length - 1));
+  const inputGap = Math.min(54, 300 / Math.max(1, inputNodes.length - 1));
+  inputNodes.forEach((node, i) => positions.set(node.id, { x: 28, y: 55 + i * inputGap, w: 188, h: 42 }));
+  outputNodes.forEach((node, i) => positions.set(node.id, { x: 730, y: 52 + i * outputGap, w: 146, h: 50 }));
   positions.set('esp32', { x: 382, y: 48, w: 250, h: 360 });
   positions.set('wifi', { x: 710, y: 345, w: 166, h: 52 });
   positions.set('webapp', { x: 875, y: 345, w: 112, h: 52 });
 
-  const inputPins = new Map(inputNodes.map((node, i) => [node.id, 78 + i * 54]));
-  const outputPins = new Map(outputNodes.map((node, i) => [node.id, 85 + i * 62]));
+  const inputPins = new Map(inputNodes.map((node, i) => [node.id, 76 + i * inputGap]));
+  const outputPins = new Map(outputNodes.map((node, i) => [node.id, 75 + i * outputGap]));
   const paths = new Map();
   const wireLayer = document.createElementNS(NS, 'g');
   wireLayer.classList.add('flow-wires');
@@ -115,8 +117,8 @@ export function createFlow(root, { nodes, edges }) {
     group.innerHTML = `<rect x="${x - width / 2}" y="${y - 11}" width="${width}" height="22" rx="11"/><text x="${x}" y="${y + 4}" text-anchor="middle">${text}</text>`;
     svg.append(group);
   }
-  inputNodes.forEach((node) => addPill(node.sub.replace(/^GPIO\s*/, 'G'), 340, inputPins.get(node.id)));
-  outputNodes.forEach((node) => addPill(node.sub === 'SPI' ? 'SPI' : node.sub.replace(/^GPIO\s*/, 'G').replace(' (PWM)', ' PWM'), 681, outputPins.get(node.id)));
+  inputNodes.forEach((node) => addPill(node.sub.replace(/^GPIO\s*/, 'G').replace(/\s*[·/]\s*/g, ' · '), 340, inputPins.get(node.id)));
+  outputNodes.forEach((node) => addPill(node.sub === 'SPI' ? 'SPI' : node.sub.replace(/^GPIO\s*/, 'G').replace(/\s*[·/]\s*/g, ' · ').replace(' (PWM)', ' PWM'), 681, outputPins.get(node.id)));
   addPill('Wi-Fi ↑', 671, 356);
   addPill('cmd ↓', 671, 388);
 
