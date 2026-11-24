@@ -13,3 +13,4 @@ How to use:
 | 1 | [Hardware design and GPIO budget](01-hardware-design.md) | `docs/gemini-output/01-hardware-design.md` |
 | 2 | [MQTT and cloud architecture](02-mqtt-cloud.md) | `docs/gemini-output/02-mqtt-cloud.md` |
 | 3 | [Review of the game logic](03-review-game-logic.md) | `docs/gemini-output/03-review-game-logic.md` |
+| 4 | [Fact-check the parts + firmware](04-parts-and-firmware-review.md) | `docs/gemini-output/04-parts-and-firmware-review.md` |

@@ -48,7 +48,7 @@ export const PARTS = [
   },
   {
     id: 'display', name: 'Display', model: '1.14" ST7789 TFT, 240 × 135 (built into the T-Display)',
-    pins: Object.values(PINS.TFT), fn: 'display.draw',
+    pins: Object.values(PINS.TFT), fn: 'display.note',
     what: 'Shows the falling notes, Simon\'s status, the score and the treat counter.',
     how: 'The screen is driven over SPI at 40 MHz. To avoid flicker the firmware draws each frame into an off-screen sprite (a frame buffer in RAM) and pushes it to the screen in one go, every 40 ms (25 Hz, above the 20 Hz the brief requires). A note\'s y position is computed from how many milliseconds remain before it should be played.',
     specs: ['240 × 135 px, 16-bit colour', 'SPI 40 MHz', 'Refresh 25 Hz', 'Library: TFT_eSPI (sprite)'],
@@ -140,3 +140,30 @@ export const FLOW = {
     { id: 'wifi-esp32', from: 'wifi', to: 'esp32' },
   ],
 };
+
+/** GPIO budget: [gpio, signal, part id, direction, peripheral, note] */
+export const PIN_TABLE = [
+  [13, 'Key Do', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [15, 'Key Re', 'keys', 'in', 'GPIO', 'strapping pin: fine with a pull-up'],
+  [17, 'Key Mi', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [21, 'Key Fa', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [22, 'Key Sol', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [25, 'Key La', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [36, 'Key Si', 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
+  [37, "Key Do'", 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
+  [26, 'Speaker', 'speaker', 'out', 'LEDC PWM', 'square wave to the PAM8302 amp'],
+  [27, 'LED data', 'leds', 'out', 'RMT / bit-bang', 'WS2812B via a 74AHCT125 level shifter'],
+  [32, 'Servo', 'servo', 'out', 'LEDC PWM 50 Hz', 'SG90 on 5 V, shared GND'],
+  [33, 'PIR', 'pir', 'in', 'GPIO + RTC', 'ext0 deep-sleep wake-up'],
+  [39, 'IR level', 'irLevel', 'in', 'GPIO', 'input-only; module drives the line'],
+  [38, 'IR drop', 'irDrop', 'in', 'GPIO interrupt', 'input-only; FALLING edge'],
+  [34, 'Battery', 'battery', 'in', 'ADC1', 'on-board divider ×2'],
+  [0, 'MODE button', 'buttons', 'in', 'GPIO', 'boot pin: read only after start-up'],
+  [35, 'OPTION button', 'buttons', 'in', 'GPIO', 'on-board button'],
+  [19, 'TFT MOSI', 'display', 'out', 'SPI', 'built in'],
+  [18, 'TFT SCLK', 'display', 'out', 'SPI', 'built in'],
+  [5, 'TFT CS', 'display', 'out', 'SPI', 'built in'],
+  [16, 'TFT DC', 'display', 'out', 'GPIO', 'built in'],
+  [23, 'TFT RST', 'display', 'out', 'GPIO', 'built in'],
+  [4, 'TFT backlight', 'display', 'out', 'GPIO', 'built in'],
+];

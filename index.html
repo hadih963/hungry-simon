@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hungry Simon · ESP32 rhythm instrument simulator</title>
+  <title>Hungry Simon · how the ESP32 rhythm instrument works</title>
   <link rel="stylesheet" href="styles/app.css">
   <link rel="stylesheet" href="styles/device.css">
+  <link rel="stylesheet" href="styles/flow.css">
 </head>
 <body>
   <header class="top">
@@ -13,25 +14,25 @@
       <div class="logo" aria-hidden="true">♪</div>
       <div>
         <h1>HUNGRY <span>SIMON</span></h1>
-        <p class="tag">PLAY · REPEAT · GET A TREAT</p>
+        <p class="tag">PLAY · SEE THE CODE · UNDERSTAND</p>
       </div>
     </div>
-    <p class="sub">Simulator of an ESP32 rhythm instrument · Project Group 9 · ACS_1C 2026/2027</p>
+    <p class="sub">An ESP32 rhythm instrument and how it works inside · Project Group 9 · ACS_1C 2026/2027</p>
   </header>
 
-  <main class="layout">
-    <section class="stage card">
+  <main class="learn-layout">
+    <!-- 1. the device -->
+    <section class="stage card" aria-label="The instrument">
+      <h2><span class="dot dev"></span>The instrument <span class="legend">click any part to learn about it</span></h2>
       <div id="device" class="device-root"></div>
-
       <div class="status" id="status" role="status" aria-live="polite"></div>
-
       <div class="controls">
         <div class="group">
           <span class="label">Mode (button on device)</span>
           <div class="seg" id="modes">
             <button data-mode="free" class="on">Free play</button>
             <button data-mode="simon">Simon says</button>
-            <button data-mode="song">Song challenge</button>
+            <button data-mode="song">Song</button>
             <button data-mode="pet">Pet mode</button>
           </div>
         </div>
@@ -39,53 +40,77 @@
           <span class="label">Physical world</span>
           <div class="row">
             <button id="presence" class="ghost">🧍 Step in front</button>
-            <button id="refill" class="ghost">🫙 Refill treats</button>
-            <button id="sleep" class="ghost">🌙 Sleep now</button>
+            <button id="refill" class="ghost">🫙 Refill</button>
+            <button id="sleep" class="ghost">🌙 Sleep</button>
           </div>
         </div>
       </div>
-      <p class="hint">Keyboard: <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd> <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><kbd>;</kbd> = Do Re Mi Fa Sol La Si Do' · or click / touch the keys</p>
+      <p class="hint">Keyboard: <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd> <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><kbd>;</kbd> = Do Re Mi Fa Sol La Si Do'</p>
     </section>
 
-    <aside class="side">
-      <section class="card">
-        <h2><span class="dot cloud"></span>Web app · control</h2>
-        <p class="muted small">Settings travel to the device over MQTT (TLS). <span id="broker"></span></p>
-        <div class="form">
-          <label>Player
-            <select id="player">
-              <option>Player 1</option><option>Player 2</option><option>Guest</option><option>Pet</option>
-            </select>
-          </label>
-          <label>Difficulty
-            <select id="difficulty">
-              <option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option>
-            </select>
-          </label>
-          <label>Song
-            <select id="song"></select>
-          </label>
-          <label>Volume <output id="volumeOut">70%</output>
-            <input id="volume" type="range" min="0" max="100" value="70">
-          </label>
-          <label>Daily treat limit
-            <input id="limit" type="number" min="0" max="50" value="5">
-          </label>
-          <button id="remoteDispense" class="primary">Dispense a treat remotely</button>
+    <!-- 2. the firmware, running -->
+    <section class="code card" aria-label="Firmware">
+      <h2><span class="dot code"></span>Firmware running on the ESP32 <span class="legend">real Arduino C · firmware/hungry_simon</span></h2>
+      <div class="code-controls">
+        <div class="seg small" id="speeds"></div>
+        <button id="nextStep" class="ghost" hidden>Next step ›</button>
+        <label class="check"><input type="checkbox" id="follow" checked> follow execution</label>
+        <span class="counter" id="counter"></span>
+      </div>
+      <div class="now" id="now"><span class="now-why">Press a key, click "Step in front" or pick a mode, and watch which code runs.</span></div>
+      <div class="file-tabs" id="fileTabs"></div>
+      <div class="codebox" id="code" tabindex="0" aria-label="Firmware source"></div>
+      <div class="serial-head"><span>Serial Monitor · 115200 baud</span><button id="clearSerial" class="link">clear</button></div>
+      <div class="serial" id="serial" aria-live="off"></div>
+    </section>
+
+    <!-- 3. signal flow -->
+    <section class="flow card" aria-label="Signal flow">
+      <h2><span class="dot flowdot"></span>Signal flow <span class="legend">inputs → ESP32 → outputs → cloud</span></h2>
+      <div id="flow" class="flow-root"></div>
+    </section>
+
+    <!-- 4. learn more / web app -->
+    <section class="info card" aria-label="Details">
+      <div class="tabs" role="tablist" id="infoTabs">
+        <button role="tab" data-tab="parts" class="on">Parts</button>
+        <button role="tab" data-tab="pinout">Pinout</button>
+        <button role="tab" data-tab="webapp">Web app</button>
+        <button role="tab" data-tab="mqtt">MQTT traffic</button>
+      </div>
+
+      <div class="tab-panel" data-panel="parts" id="partsPanel"></div>
+      <div class="tab-panel" data-panel="pinout" id="pinoutPanel" hidden></div>
+
+      <div class="tab-panel" data-panel="webapp" hidden>
+        <div class="webapp-grid">
+          <div>
+            <p class="muted small">This is the cloud web app. Settings travel to the device over MQTT (TLS). <span id="broker"></span></p>
+            <div class="form">
+              <label>Player
+                <select id="player"><option>Player 1</option><option>Player 2</option><option>Guest</option><option>Pet</option></select>
+              </label>
+              <label>Difficulty
+                <select id="difficulty"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select>
+              </label>
+              <label>Song <select id="song"></select></label>
+              <label>Volume <output id="volumeOut">70%</output><input id="volume" type="range" min="0" max="100" value="70"></label>
+              <label>Daily treat limit <input id="limit" type="number" min="0" max="50" value="5"></label>
+              <button id="remoteDispense" class="primary">Dispense a treat remotely</button>
+            </div>
+          </div>
+          <div>
+            <div class="stats" id="stats"></div>
+            <table class="best"><thead><tr><th>Best scores</th><th>Simon</th><th>Song</th><th>Pet</th></tr></thead><tbody id="best"></tbody></table>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <section class="card">
-        <h2><span class="dot stats"></span>Statistics</h2>
-        <div class="stats" id="stats"></div>
-        <table class="best"><thead><tr><th>Best scores</th><th>Simon</th><th>Song</th><th>Pet</th></tr></thead><tbody id="best"></tbody></table>
-      </section>
-
-      <section class="card">
-        <h2><span class="dot mqtt"></span>MQTT traffic <span class="legend">↑ device publishes · ↓ device receives</span></h2>
+      <div class="tab-panel" data-panel="mqtt" hidden>
+        <p class="muted small">↑ device publishes · ↓ device receives</p>
         <ul class="mqtt" id="mqtt"></ul>
-      </section>
-    </aside>
+      </div>
+    </section>
   </main>
 
   <script type="module" src="src/main.js"></script>

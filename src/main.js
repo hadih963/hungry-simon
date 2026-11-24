@@ -1,15 +1,21 @@
-// Wires the simulated hardware (device visuals), the firmware logic (game) and the cloud web app together.
+// Wires the simulated hardware (device visuals), the game logic, the cloud web app and the
+// learning layer (firmware code viewer, trace player, signal flow, parts) together.
 import { createDevice } from './visuals/device.js';
+import { createFlow } from './visuals/flow.js';
 import { KEY_NAMES, KEY_COLORS, KEYBOARD, PET_KEYS } from './core/notes.js';
 import { audio } from './core/audio.js';
 import { SONGS } from './core/songs.js';
 import { Game } from './core/game.js';
 import { createDisplay } from './core/display.js';
-import { createCloud, BROKER } from './core/cloud.js';
+import { createCloud, BROKER, DEVICE_ID } from './core/cloud.js';
+import { FLOW, PINS } from './learn/hardware.js';
+import { createCodeView } from './learn/codeview.js';
+import { createTracer, SPEEDS } from './learn/trace.js';
+import { createPartsPanel, createPinoutPanel } from './learn/panels.js';
 
 const $ = (id) => document.getElementById(id);
-const SLEEP_AFTER_MS = 25000;   // no presence + no input → deep sleep
-const CAPACITY = 20;            // treats in a full reservoir
+const SLEEP_AFTER_MS = 25000;   // no presence + no input → deep sleep (same as the firmware)
+const CAPACITY = 20;
 const LOW_LEVEL = 3;
 
 const dev = {
@@ -20,15 +26,71 @@ const dev = {
   dailyLimit: 5,
   dispensing: false,
   pendingRemote: 0,
+  bootAt: performance.now(),
   lastActivity: performance.now(),
   stats: { gamesPlayed: 0, treatsDispensed: 0, mistakes: 0, best: {} },
 };
+const millis = () => Math.round(performance.now() - dev.bootAt);   // like millis(): restarts after deep sleep
 
-// ------------------------------------------------------------------ hardware + logic
+// ------------------------------------------------------------------ hardware views
 const device = createDevice($('device'), { keyCount: 8, keyNames: KEY_NAMES, keyColors: KEY_COLORS });
+const flow = createFlow($('flow'), FLOW);
 const cloud = createCloud($('mqtt'));
 $('broker').textContent = BROKER;
 
+// ------------------------------------------------------------------ learning layer
+const code = await createCodeView({ tabsEl: $('fileTabs'), codeEl: $('code') });
+const tracer = createTracer({ code, flow, device, serialEl: $('serial'), nowEl: $('now'), counterEl: $('counter') });
+const trace = (...steps) => tracer.emit(...steps);
+
+$('speeds').innerHTML = Object.entries(SPEEDS).map(([k, s]) =>
+  `<button data-speed="${k}" class="${k === 'realtime' ? 'on' : ''}">${s.label}</button>`).join('');
+$('speeds').addEventListener('click', (e) => {
+  const s = e.target.closest('button')?.dataset.speed;
+  if (!s) return;
+  tracer.setSpeed(s);
+  document.querySelectorAll('#speeds button').forEach((b) => b.classList.toggle('on', b.dataset.speed === s));
+  $('nextStep').hidden = s !== 'step';
+});
+$('nextStep').addEventListener('click', () => tracer.next());
+$('follow').addEventListener('change', (e) => tracer.setFollow(e.target.checked));
+$('clearSerial').addEventListener('click', () => { $('serial').innerHTML = ''; });
+
+const partsPanel = createPartsPanel($('partsPanel'), {
+  onSelect: (id) => selectPart(id),
+  onShowCode: (id) => { trace({ id }); if (tracer.speed === 'step') tracer.next(); },
+});
+const pinoutPanel = createPinoutPanel($('pinoutPanel'), { onSelect: (id) => selectPart(id, false) });
+
+function selectPart(id, openParts = true) {
+  if (id === 'webapp') id = 'wifi';
+  partsPanel.show(id);
+  pinoutPanel.show(id);
+  flow.select(id);
+  tracer.setSelectedPart(id);
+  if (openParts) {
+    showTab('parts');
+    const info = document.querySelector('.info');
+    const r = info.getBoundingClientRect();
+    if (r.top > innerHeight - 80) info.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+device.onPartClick?.((id) => selectPart(id));
+flow.onSelect((id) => selectPart(id));
+
+function showTab(name) {
+  document.querySelectorAll('#infoTabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.panel !== name; });
+}
+$('infoTabs').addEventListener('click', (e) => { const t = e.target.closest('button')?.dataset.tab; if (t) showTab(t); });
+
+// ------------------------------------------------------------------ cloud publish (device → web app)
+function publish(topic, payload) {
+  cloud.publish(topic, payload);
+  trace({ id: 'cloud.publish', serial: `[mqtt] publish hungrysimon/${DEVICE_ID}/${topic} ${JSON.stringify(payload)}` });
+}
+
+// ------------------------------------------------------------------ game
 const game = new Game({
   playNote(k, ms) { audio.note(k, ms); device.pulseSpeaker(); },
   flash(color, ms) { device.flashAll(color, ms); },
@@ -37,17 +99,18 @@ const game = new Game({
     else if (name === 'tickAccent') audio.tick(true);
     else audio[name]?.();
   },
-  reward(reason) { dispense('game', reason); },
+  reward(reason) { trace('game.treat'); dispense('game', reason); },
+  trace,
   publish(kind, data) {
     if (kind === 'game_start') {
       dev.stats.gamesPlayed++;
-      cloud.publish('stats', statsPayload());
+      publish('stats', statsPayload());
     } else if (kind === 'mistake') {
       dev.stats.mistakes++;
     } else if (kind === 'score') {
       const key = `${data.player}|${data.mode}`;
       dev.stats.best[key] = Math.max(dev.stats.best[key] || 0, data.score);
-      cloud.publish('score', data);
+      publish('score', data);
     }
     renderStats();
   },
@@ -61,19 +124,24 @@ const held = new Set();
 function keyEvent(i, down) {
   if (game.mode === 'pet') i = i - (i % 2);
   if (!dev.awake) {
-    if (down) setStatus('Asleep. Step in front of the presence sensor to wake Hungry Simon.', true);
+    if (down) setStatus('Asleep: the CPU is off, so keys do nothing. Step in front of the PIR sensor to wake it.', true);
     return;
   }
   dev.lastActivity = performance.now();
   if (down) {
     if (held.has(i)) return;
     held.add(i);
+    trace('loop.keys', 'keys.read', 'keys.bounce', 'keys.debounce',
+      { id: 'keys.down', serial: `[key] ${KEY_NAMES[i]} down (GPIO ${PINS.KEYS[i]}) t=${millis()} ms` },
+      'keys.sound', 'sound.on', 'keys.game');
     audio.noteOn(i);
     device.pressKey(i, true);
     device.pulseSpeaker();
     game.keyDown(i);
+    trace('leds.held', 'leds.show', 'display.push');
   } else {
     if (!held.delete(i)) return;
+    trace('keys.read', 'keys.debounce', 'keys.up', 'sound.off', 'leds.show');
     audio.noteOff(i);
     device.pressKey(i, false);
     game.keyUp(i);
@@ -107,31 +175,49 @@ function setPresence(p) {
   $('presence').textContent = p ? '🚶 Walk away' : '🧍 Step in front';
   dev.lastActivity = performance.now();
   if (p && !dev.awake) wake('presence');
+  else if (dev.awake) trace({ id: 'sensors.presence', serial: `[pir] presence: ${p ? 'yes' : 'no'}` });
 }
 
 function wake(reason) {
   dev.awake = true;
+  dev.bootAt = performance.now();
   dev.lastActivity = performance.now();
   device.setAwake(true);
   audio.wake();
+  trace(
+    { id: 'setup', serial: '[boot] Hungry Simon firmware v0.1' },
+    { id: 'setup.wake', serial: '[boot] woken from deep sleep by the PIR sensor (ext0)' },
+    'setup.cloud',
+    { id: 'cloud.connect', serial: '[mqtt] connected over TLS, subscribed to cmd/#',
+      note: 'Once Wi-Fi is up, loop() connects to the MQTT broker over TLS (port 8883) and subscribes to its command topics. The "last will" makes the broker announce "offline" if the device disappears.' },
+    'setup.game',
+  );
   game.start(game.mode);
-  cloud.publish('state', { awake: true, wakeReason: reason, mode: game.mode });
+  trace('loop');
+  publish('state', { awake: true, wakeReason: reason, mode: game.mode });
   setStatus(`Awake (${reason}). Mode: ${modeName(game.mode)}.`);
   if (dev.pendingRemote) {
     const n = dev.pendingRemote;
     dev.pendingRemote = 0;
-    for (let k = 0; k < n; k++) setTimeout(() => dispense('remote', 'queued remote dispense'), 800 + k * 1300);
+    for (let k = 0; k < n; k++) {
+      setTimeout(() => {
+        trace('cloud.loop', { id: 'cloud.receive', serial: '[mqtt] received cmd/dispense (kept by the broker while asleep)' }, 'cloud.dispense');
+        dispense('remote', 'queued remote dispense');
+      }, 900 + k * 1400);
+    }
   }
 }
 
 function sleep(reason) {
   releaseAll();
   game.stop();
+  trace('loop.sleep', { id: 'sleep.enter', serial: '[sleep] nobody here -> deep sleep' });
+  publish('state', { awake: false, sleepReason: reason });
+  trace('sleep.arm', 'sleep.start');
   dev.awake = false;
   device.setAwake(false);
   audio.sleep();
-  cloud.publish('state', { awake: false, sleepReason: reason });
-  setStatus('Deep sleep. Step in front of the presence sensor to wake it.');
+  setStatus('Deep sleep. Step in front of the PIR sensor to wake it.');
 }
 
 device.onPresenceToggle(() => setPresence(!dev.presence));
@@ -141,28 +227,38 @@ $('sleep').addEventListener('click', () => { if (dev.awake) { setPresence(false)
 // ------------------------------------------------------------------ treats
 async function dispense(source, reason) {
   if (dev.dispensing) return;
+  trace('treat.limit');
   if (dev.treatsToday >= dev.dailyLimit) {
     game.say('TREAT LIMIT', '#ffd60a', 1400);
-    cloud.publish('treat/blocked', { source, reason: 'daily_limit', limit: dev.dailyLimit });
+    tracer.serial(`[treat] blocked: daily limit ${dev.dailyLimit} reached`);
+    publish('treat/blocked', { source, reason: 'daily_limit', limit: dev.dailyLimit });
     setStatus(`No treat: the daily limit of ${dev.dailyLimit} is reached.`, true);
     return;
   }
   if (dev.treatsLeft <= 0) {
     game.say('REFILL ME', '#ff9f1c', 1400);
-    cloud.publish('alert/treat_empty', { level: 0 });
-    setStatus('No treat: the reservoir is empty (IR level sensor).', true);
+    trace({ id: 'servo.dispense', serial: `[treat] dispensing (${reason})` }, 'servo.back',
+      { id: 'treat.nodrop', serial: '[treat] no drop seen: reservoir empty or jammed' });
+    publish('alert/treat_empty', { confirmed: false });
+    setStatus('No treat fell: the reservoir is empty (the IR drop sensor saw nothing).', true);
     return;
   }
   dev.dispensing = true;
-  await device.dispense();
+  trace({ id: 'servo.dispense', serial: `[treat] dispensing (${reason})` });
+  const landed = device.dispense();
+  setTimeout(() => trace('servo.back'), 350);
+  await landed;
   dev.dispensing = false;
   dev.treatsLeft--;
   dev.treatsToday++;
   dev.stats.treatsDispensed++;
   device.setTreatLevel(dev.treatsLeft / CAPACITY);
-  // On the real device the IR sensor at the slide confirms the drop.
-  cloud.publish('treat/dispensed', { source, reason, dropConfirmedByIR: true, left: dev.treatsLeft, today: dev.treatsToday });
-  if (dev.treatsLeft <= LOW_LEVEL) cloud.publish('alert/treat_low', { left: dev.treatsLeft, capacity: CAPACITY });
+  trace('sensors.drop', { id: 'treat.confirmed', serial: `[treat] drop confirmed by IR, ${dev.treatsToday} today` });
+  publish('treat/dispensed', { source, reason, dropConfirmedByIR: true, today: dev.treatsToday });
+  if (dev.treatsLeft <= LOW_LEVEL) {
+    trace({ id: 'sensors.level', serial: '[treat] level LOW -> alert' });
+    publish('alert/treat_low', { left: dev.treatsLeft, capacity: CAPACITY });
+  }
   setStatus(`Treat released (${reason}). ${dev.treatsLeft} left in the reservoir.`);
   renderStats();
 }
@@ -170,22 +266,22 @@ async function dispense(source, reason) {
 $('refill').addEventListener('click', () => {
   dev.treatsLeft = CAPACITY;
   device.setTreatLevel(1);
-  cloud.publish('state', { treatsLeft: CAPACITY, event: 'refilled' });
+  if (dev.awake) trace({ id: 'sensors.level', serial: '[treat] level OK' });
   setStatus('Reservoir refilled.');
   renderStats();
 });
 
-// ------------------------------------------------------------------ modes (physical button)
+// ------------------------------------------------------------------ modes (MODE button on the board)
 const modeName = (m) => ({ free: 'Free play', simon: 'Simon says', song: 'Song challenge', pet: 'Pet mode' }[m]);
 
-function setMode(m) {
+function setMode(m, viaButton = true) {
   releaseAll();
   device.setPetMode(m === 'pet');
   document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   if (dev.awake) {
+    if (viaButton) trace('loop.keys', { id: 'buttons.mode', serial: `[button] mode -> ${m}` });
     game.start(m);
     dev.lastActivity = performance.now();
-    cloud.publish('state', { mode: m });
     setStatus(`Mode: ${modeName(m)}.`);
   } else {
     game.mode = m;
@@ -198,48 +294,68 @@ document.querySelectorAll('#modes button').forEach((b) => b.addEventListener('cl
 const songSel = $('song');
 SONGS.forEach((s) => songSel.add(new Option(s.title, s.id)));
 
+function received(cmd) {
+  trace('cloud.loop', { id: 'cloud.receive', serial: `[mqtt] received ${cmd}` });
+}
+
 cloud.subscribe('cmd/settings', (s) => {
+  if (!dev.awake) return;
+  received('cmd/settings');
   if (s.difficulty && s.difficulty !== game.difficulty) {
     game.difficulty = s.difficulty;
-    if (dev.awake && game.mode !== 'free' && game.mode !== 'pet') game.start(game.mode);
+    if (game.mode === 'simon' || game.mode === 'song') game.start(game.mode);
   }
   if (s.volume !== undefined) { audio.setVolume(s.volume); device.setVolume(s.volume); }
   if (s.dailyTreatLimit !== undefined) dev.dailyLimit = s.dailyTreatLimit;
+  const d = { easy: 0, normal: 1, hard: 2 }[game.difficulty];
+  trace({ id: 'cloud.settings', serial: `[settings] difficulty=${d} volume=${Math.round(audio.volume * 100)}% limit=${dev.dailyLimit}` });
   renderStats();
 });
 cloud.subscribe('cmd/song', ({ song }) => {
+  if (!dev.awake) return;
+  received('cmd/song');
+  trace('cloud.song');
   game.songId = song;
-  setMode('song');
+  setMode('song', false);
 });
-cloud.subscribe('cmd/player', ({ player }) => { game.player = player; renderStats(); });
+cloud.subscribe('cmd/player', ({ player }) => {
+  game.player = player;
+  if (dev.awake) { received('cmd/player'); trace('cloud.player'); }
+  renderStats();
+});
 cloud.subscribe('cmd/dispense', () => {
   if (!dev.awake) {
     dev.pendingRemote++;
-    setStatus('Remote treat queued: the device picks it up when it wakes (no Wi-Fi in deep sleep).', true);
+    setStatus('Remote treat queued: the radio is off in deep sleep, so the broker keeps the command (QoS 1) until the device wakes.', true);
     return;
   }
+  received('cmd/dispense');
+  trace('cloud.dispense');
   dispense('remote', 'web app');
 });
 
+// Settings changed while asleep are retained by the broker and applied on wake; here we simply apply them.
 const settings = () => ({
   difficulty: $('difficulty').value,
   volume: Number($('volume').value) / 100,
   dailyTreatLimit: Math.max(0, Math.min(50, Number($('limit').value) || 0)),
 });
-$('difficulty').addEventListener('change', () => cloud.send('cmd/settings', settings()));
-$('limit').addEventListener('change', () => cloud.send('cmd/settings', settings()));
+function sendSettings() {
+  const s = settings();
+  if (!dev.awake) { game.difficulty = s.difficulty; audio.setVolume(s.volume); dev.dailyLimit = s.dailyTreatLimit; renderStats(); }
+  cloud.send('cmd/settings', s);
+}
+$('difficulty').addEventListener('change', sendSettings);
+$('limit').addEventListener('change', sendSettings);
 $('volume').addEventListener('input', () => { $('volumeOut').textContent = `${$('volume').value}%`; });
-$('volume').addEventListener('change', () => cloud.send('cmd/settings', settings()));
-songSel.addEventListener('change', () => cloud.send('cmd/song', { song: songSel.value }));
+$('volume').addEventListener('change', sendSettings);
+songSel.addEventListener('change', () => { game.songId = songSel.value; cloud.send('cmd/song', { song: songSel.value }); });
 $('player').addEventListener('change', () => cloud.send('cmd/player', { player: $('player').value }));
 $('remoteDispense').addEventListener('click', () => { audio.unlock(); cloud.send('cmd/dispense', { count: 1 }); });
 
 // ------------------------------------------------------------------ stats + status
 function statsPayload() {
-  return {
-    gamesPlayed: dev.stats.gamesPlayed, treatsDispensed: dev.stats.treatsDispensed,
-    treatsToday: dev.treatsToday, treatsLeft: dev.treatsLeft, mistakes: dev.stats.mistakes,
-  };
+  return { gamesPlayed: dev.stats.gamesPlayed, treatsToday: dev.treatsToday, treatsLeft: dev.treatsLeft };
 }
 
 function renderStats() {
@@ -255,20 +371,17 @@ function renderStats() {
     ['simon', 'song', 'pet'].map((m) => `<td>${dev.stats.best[`${p}|${m}`] ?? '–'}</td>`).join('')}</tr>`).join('');
 }
 
-let statusTimer = 0;
 function setStatus(msg, warn = false) {
   const el = $('status');
   el.textContent = msg;
   el.classList.toggle('warn', warn);
-  clearTimeout(statusTimer);
 }
 
-// ------------------------------------------------------------------ main loop (display refresh ≥ 20 Hz)
+// ------------------------------------------------------------------ main loop (like loop() on the ESP32)
 const lastLed = new Map();
 function frame(now) {
   game.tick(now);
 
-  // LEDs: a held key shows its own colour; otherwise whatever the game wants (next note / Simon playback).
   const keys = game.mode === 'pet' ? PET_KEYS : [0, 1, 2, 3, 4, 5, 6, 7];
   for (const k of keys) {
     let want = null;
@@ -280,21 +393,21 @@ function frame(now) {
     }
   }
 
-  if (dev.awake && !dev.presence && !held.size && now - dev.lastActivity > SLEEP_AFTER_MS) sleep('idle');
+  if (dev.awake && !dev.presence && !held.size && tracer.speed === 'realtime' && now - dev.lastActivity > SLEEP_AFTER_MS) sleep('idle');
 
   display.render(now);
   requestAnimationFrame(frame);
 }
 
-// Debug handle for the team and automated tests: window.hungrySimon.game / .dev / .keyEvent
-window.hungrySimon = { game, dev, keyEvent, dispense, setMode, setPresence };
+// Debug handle for the team and automated tests
+window.hungrySimon = { game, dev, keyEvent, dispense, setMode, setPresence, selectPart, tracer, code };
 
 // ------------------------------------------------------------------ boot
 device.setAwake(false);
 device.setTreatLevel(dev.treatsLeft / CAPACITY);
 device.setVolume(0.7);
-setStatus('Deep sleep. Click "Step in front" (or the sensor on the device) to wake Hungry Simon.');
+setStatus('Deep sleep. Click "Step in front" (or the PIR sensor on the device) to wake Hungry Simon.');
+tracer.serial('-- ESP32 is in deep sleep (≈10 µA). The PIR sensor will wake it. --');
 renderStats();
 setInterval(renderStats, 1000);
-cloud.publish('state', { online: true, firmware: 'sim-0.1', awake: false });
 requestAnimationFrame(frame);

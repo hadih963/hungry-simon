@@ -1,5 +1,5 @@
 // Game logic for all four modes. No DOM here: the outside world is reached through `io`.
-import { KEY_COLORS, PET_KEYS } from './notes.js';
+import { KEY_COLORS, KEY_NAMES, PET_KEYS } from './notes.js';
 import { songById } from './songs.js';
 
 export const DIFFICULTY = {
@@ -32,6 +32,9 @@ export class Game {
   }
 
   get cfg() { return DIFFICULTY[this.difficulty]; }
+
+  /** Report which firmware steps this action corresponds to (see src/learn/trace.js). */
+  trace(...steps) { this.io.trace?.(...steps); }
   get isSimon() { return this.mode === 'simon' || this.mode === 'pet'; }
 
   after(ms, fn) {
@@ -49,6 +52,7 @@ export class Game {
     this.mode = mode;
     this.score = 0;
     this.combo = 0;
+    this.trace({ id: 'game.start', serial: `[game] mode = ${mode}` });
     if (this.isSimon) this.startSimon(true);
     else if (mode === 'song') this.startSong(false);
     else this.state = 'free';
@@ -92,6 +96,7 @@ export class Game {
     this.seq = Array.from({ length: len }, () => pick(this.pool));
     this.pos = 0;
     this.state = 'ready';
+    this.trace('simon.new');
     this.io.publish('game_start', { mode: this.mode, goal: this.goal });
     this.after(700, () => this.showSequence());
   }
@@ -101,32 +106,44 @@ export class Game {
     this.pos = 0;
     this.lit = null;
     const on = this.gap * 0.62;
+    this.trace({ id: 'simon.show', serial: `[simon] watch: ${this.seq.length} notes` });
     this.seq.forEach((k, i) => {
-      this.after(450 + i * this.gap, () => { this.lit = k; this.io.playNote(k, on); });
+      this.after(450 + i * this.gap, () => {
+        this.lit = k;
+        this.io.playNote(k, on);
+        this.trace('simon.shownote', 'sound.note', 'leds.show');
+      });
       this.after(450 + i * this.gap + on, () => { this.lit = null; });
     });
-    this.after(450 + this.seq.length * this.gap - this.gap * 0.3, () => { this.state = 'input'; });
+    this.after(450 + this.seq.length * this.gap - this.gap * 0.3, () => {
+      this.state = 'input';
+      this.trace({ id: 'simon.yourturn', serial: '[simon] your turn' });
+    });
   }
 
   simonInput(k) {
     if (this.state !== 'input') return;
     if (k !== this.seq[this.pos]) {
-      this.fail('WRONG NOTE', () => this.showSequence());
+      this.trace('simon.wrong');
+      this.fail('WRONG NOTE', () => this.showSequence(), 'wrong note');
       return;
     }
     this.pos++;
+    this.trace({ id: 'simon.correct', serial: `[simon] ${KEY_NAMES[k]} correct (${this.pos}/${this.seq.length})` });
     if (this.pos < this.seq.length) return;
 
     this.state = 'done';
     this.score += this.seq.length * (this.mode === 'pet' ? 5 : 10) * (1 + this.wins);
     if (this.seq.length >= this.goal) {
       this.wins++;
+      this.trace('simon.goal');
       this.win(`${this.mode === 'pet' ? 'Pet pattern' : 'Simon sequence'} of ${this.seq.length}`);
       this.after(3200, () => this.startSimon(false));
     } else {
       this.io.sound('success');
       this.say('NICE!', '#3ddc84', 700);
       this.seq.push(pick(this.pool));
+      this.trace('sound.fx', { id: 'simon.grow', serial: `[simon] round done, next length ${this.seq.length}` });
       this.after(1000, () => this.showSequence());
     }
   }
@@ -157,9 +174,14 @@ export class Game {
       this.after(this.songStart - (COUNT_IN - b) * beatMs - now, () => {
         this.io.sound(b === 0 ? 'tickAccent' : 'tick');
         this.countBeat = COUNT_IN - b;
+        this.trace({ id: 'song.countin', serial: `[song] count-in ${COUNT_IN - b}` }, 'sound.fx');
       });
     }
     this.after(this.songStart - now - this.cfg.window, () => { if (this.state === 'countin') this.state = 'play'; });
+    this.trace('song.chart', {
+      id: 'song.start',
+      serial: `[song] ${song.title}${restart ? ' (retry)' : ''}: ${song.notes.length} notes, beat ${Math.round(beatMs)} ms`,
+    });
     this.io.publish('game_start', { mode: 'song', song: song.id, attempt: this.attempts });
   }
 
@@ -171,9 +193,10 @@ export class Game {
     const off = now - this.songStart - n.t;
     const w = this.cfg.window;
     if (this.state === 'countin' && !(k === n.key && off >= -w)) return; // ignore noodling during the count-in
-    if (k !== n.key) return this.fail('WRONG NOTE', () => this.startSong(true));
-    if (off < -w) return this.fail('TOO EARLY', () => this.startSong(true));
-    if (off > w) return this.fail('TOO LATE', () => this.startSong(true));
+    this.trace('song.timing');
+    if (k !== n.key) { this.trace('song.wrong'); return this.fail('WRONG NOTE', () => this.startSong(true), 'wrong note'); }
+    if (off < -w) { this.trace('song.wrong'); return this.fail('TOO EARLY', () => this.startSong(true), 'too early'); }
+    if (off > w) { this.trace('song.wrong'); return this.fail('TOO LATE', () => this.startSong(true), 'too late'); }
 
     this.state = 'play';
     n.hit = true;
@@ -184,8 +207,11 @@ export class Game {
     const acc = 1 - Math.abs(off) / w;
     this.score += Math.round((50 + 50 * acc) * (1 + Math.min(this.combo, 20) / 10));
     this.say(acc > 0.6 ? 'PERFECT' : 'GOOD', acc > 0.6 ? '#ffd60a' : '#3ddc84', 450);
+    const sign = off >= 0 ? '+' : '';
+    this.trace({ id: 'song.hit', serial: `[song] hit ${KEY_NAMES[k]} ${sign}${Math.round(off)} ms (${acc > 0.6 ? 'perfect' : 'good'})` });
     if (this.idx >= this.chart.length) {
       this.state = 'done';
+      this.trace('song.complete');
       this.after(500, () => this.win(this.song.title));
     }
   }
@@ -194,7 +220,10 @@ export class Game {
   tick(now) {
     if (this.mode === 'song' && this.state === 'play') {
       const n = this.chart[this.idx];
-      if (n && now - this.songStart - n.t > this.cfg.window) this.fail('MISSED', () => this.startSong(true));
+      if (n && now - this.songStart - n.t > this.cfg.window) {
+        this.trace('song.missed');
+        this.fail('MISSED', () => this.startSong(true), 'missed');
+      }
     }
     this.messages = this.messages.filter((m) => now - m.t0 < m.ms);
   }
@@ -205,15 +234,19 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- outcomes
-  fail(reason, then) {
+  fail(reason, then, why = reason.toLowerCase()) {
     this.state = 'fail';
+    this.trace('sound.fx', 'leds.flash', { id: 'game.fail', serial: `[game] ${why} -> try again` });
     this.combo = 0;
     this.lit = null;
     this.io.sound('error');
     this.io.flash('#ff2d2d', 380);
     this.say(reason, '#ff4d4d', 1300);
     this.io.publish('mistake', { mode: this.mode, reason });
-    this.after(1500, then);
+    this.after(1500, () => {
+      this.trace({ id: 'game.retry', serial: '[game] restart sequence' });
+      then();
+    });
   }
 
   win(what) {
@@ -222,6 +255,7 @@ export class Game {
     this.io.sound('win');
     this.io.flash('#3ddc84', 650);
     this.say('YOU WIN!', '#3ddc84', 2200);
+    this.trace('sound.fx', 'leds.flash', { id: 'game.win', serial: `[game] WIN! score ${this.score}` });
     this.io.publish('score', {
       player: this.player, mode: this.mode, difficulty: this.difficulty,
       score: this.score, detail: what, avgTimingErrorMs: this.mode === 'song' ? this.avgOffsetMs : undefined,
