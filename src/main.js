@@ -286,6 +286,9 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Debug handle for the team and automated tests: window.hungrySimon.game / .dev / .keyEvent
+window.hungrySimon = { game, dev, keyEvent, dispense, setMode, setPresence };
+
 // ------------------------------------------------------------------ boot
 device.setAwake(false);
 device.setTreatLevel(dev.treatsLeft / CAPACITY);
