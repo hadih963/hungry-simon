@@ -33,7 +33,7 @@ device.onKeyInput((index, isDown) => {});   // pointer/touch on a keycap; index 
 device.pressKey(index, isDown);             // show keycap pressed/released (also used for keyboard input)
 device.setKeyLed(index, color, intensity);  // RGB LED under a key; color = CSS colour or null (off); intensity 0..1
 device.flashAll(color, ms);                 // all LEDs flash (success / error feedback)
-device.getDisplayCanvas();                  // <canvas> inside the display bezel, 480x160 internal pixels; core draws on it
+device.getDisplayCanvas();                  // <canvas> inside the display bezel, 320x240 internal pixels (2.8" ILI9341, 4:3); core draws on it
 device.setPresence(isPresent);              // presence sensor (PIR/HC-SR04) indicator, + "person" silhouette
 device.onPresenceToggle(cb);                // user clicked the presence sensor / person to toggle
 device.setAwake(isAwake);                   // deep sleep look (dim everything) vs awake
@@ -59,7 +59,15 @@ device.onHandToggle(cb);                    // user clicked the area under the o
 device.setTofReading(mm, isHand);           // ToF beam: show the measured distance; beam turns orange when isHand
 device.setTreatLight(color, mode);          // treat light at the outlet (9th WS2812B): color or null (off); mode 'pulse' | 'solid'
 device.dispense({ intoHand });              // as before, but when intoHand the treat lands in the hand, not the bowl
-// new partIds: 'tof' (TOF400C-VL53L1X module under the outlet), 'treatLight'
+// new partIds: 'tof' (VL53L7CX 8x8 multizone module under the chute), 'treatLight' (the chute LED stick)
+```
+
+Added in round 4 (final component list, see docs/components.md):
+```js
+// Board is now a DOIT ESP32 DevKit V1 (separate from the display); display = 2.8" ILI9341 320x240.
+// Each key has a WS2812 stick of 8 LEDs; the chute has its own stick (treat light).
+// new partIds: 'power' (2S 18650 pack + USB-C 2S charger + 5 V 5 A buck + power switch), 'amp' (MAX98357A)
+// 'buttons' = the BOOT button on the DevKit; 'battery' is kept as an alias of 'power'.
 ```
 
 ## Signal-flow diagram contract (`src/visuals/flow.js`, owner GPT)
