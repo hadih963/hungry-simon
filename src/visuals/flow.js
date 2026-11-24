@@ -111,7 +111,8 @@ export function createFlow(root, { nodes, edges }) {
 
   // GPIO/peripheral labels sit on the wire near the processor edge.
   function addPill(text, x, y) {
-    const width = Math.max(42, text.length * 7.2 + 14);
+    // Keep the pin annotation inside the short wire gap, even for I2S pin lists.
+    const width = Math.min(94, Math.max(42, text.length * 5.6 + 12));
     const group = document.createElementNS(NS, 'g');
     group.classList.add('gpio-pill');
     group.innerHTML = `<rect x="${x - width / 2}" y="${y - 11}" width="${width}" height="22" rx="11"/><text x="${x}" y="${y + 4}" text-anchor="middle">${text}</text>`;
