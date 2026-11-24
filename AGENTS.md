@@ -1,0 +1,47 @@
+# Hungry Simon simulator: rules for every contributor (human or AI)
+
+Browser simulator of **Hungry Simon**, an ESP32 rhythm instrument (Project Group 9, ACS_1C,
+The Hague University of Applied Sciences). It lets the team demo and test game logic before the
+hardware exists. See `README.md` for the product summary.
+
+## Tech rules
+- Plain HTML + CSS + ES modules. **No build step, no npm dependencies, no CDN imports.**
+- Run with `python3 -m http.server 8000` and open http://localhost:8000.
+- Must work in a current Chrome/Firefox without WebGL (use SVG / Canvas 2D / CSS only).
+- Sound uses the Web Audio API only (in `src/core/audio.js`).
+
+## Who owns what (only edit your own files; ask in a commit message / PR if you need a change elsewhere)
+| Area | Owner | Files |
+|---|---|---|
+| Game logic, audio, songs, falling-notes display, app wiring, control panel | Claude | `index.html`, `styles/app.css`, `src/main.js`, `src/core/**` |
+| Device visuals (instrument body, keys, LEDs, display bezel, sensors, treat dispenser) | GPT (Codex) | `src/visuals/**`, `styles/device.css` |
+| Technical report text, reviews, diagrams-as-text | Gemini (via Hadi) | `docs/gemini-output/**` |
+| Prompts for Gemini | Claude | `docs/gemini-prompts/**` |
+
+## Git
+- `main` is integrated by Claude. Each model works on its own branch: `gpt/<topic>`, `gemini/<topic>`.
+- Small commits, imperative messages, say which model wrote it (e.g. `visuals: draw dispenser (GPT)`).
+
+## Device visuals contract (`src/visuals/device.js`)
+The core code only talks to the device through this API. Keep the signatures stable.
+
+```js
+import { createDevice } from './visuals/device.js';
+const device = createDevice(rootElement, { keyCount: 8, keyNames, keyColors });
+
+device.onKeyInput((index, isDown) => {});   // pointer/touch on a keycap; index 0..7
+device.pressKey(index, isDown);             // show keycap pressed/released (also used for keyboard input)
+device.setKeyLed(index, color, intensity);  // RGB LED under a key; color = CSS colour or null (off); intensity 0..1
+device.flashAll(color, ms);                 // all LEDs flash (success / error feedback)
+device.getDisplayCanvas();                  // <canvas> inside the display bezel, 480x160 internal pixels; core draws on it
+device.setPresence(isPresent);              // presence sensor (PIR/HC-SR04) indicator, + "person" silhouette
+device.onPresenceToggle(cb);                // user clicked the presence sensor / person to toggle
+device.setAwake(isAwake);                   // deep sleep look (dim everything) vs awake
+device.setTreatLevel(level);                // 0..1 fill of the treat reservoir
+device.dispense();                          // animate servo wheel turning + one treat dropping down the slide; returns Promise resolved when the treat lands
+device.setPetMode(isPet);                   // pet mode: keys are merged pairwise into 4 big keys (0+1, 2+3, 4+5, 6+7); onKeyInput still reports the left index of the pair
+device.setVolume(v);                        // 0..1, optional speaker-grille animation strength
+device.pulseSpeaker();                      // a note was played (speaker grille pulse)
+```
+
+Key colours (Do→Do'): `#ff4d4d #ff9f1c #ffd60a #3ddc84 #2ec4b6 #3a86ff #8338ec #ff5fa2`.
