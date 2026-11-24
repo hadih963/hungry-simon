@@ -35,12 +35,12 @@ export function createPartsPanel(el, { onSelect, onShowCode }) {
 
 export function createPinoutPanel(el, { onSelect }) {
   el.innerHTML = `
-    <p class="muted small">GPIO budget of the LilyGO T-Display ESP32. 23 of the available pins are used. Click a row to see that part.</p>
+    <p class="muted small">GPIO budget of the LilyGO T-Display ESP32: all 16 header GPIOs plus the built-in display, buttons and battery pins are used. Click a row to see that part.</p>
     <table class="pins"><thead><tr><th>GPIO</th><th>Signal</th><th>Dir</th><th>Peripheral</th><th>Note</th></tr></thead>
     <tbody>${PIN_TABLE.map(([g, sig, part, dir, per, note]) =>
       `<tr data-part="${part}"><td><b>${g}</b></td><td>${esc(sig)}</td><td><span class="dir ${dir}">${dir}</span></td><td>${esc(per)}</td><td>${esc(note)}</td></tr>`).join('')}
     </tbody></table>
-    <p class="muted small">Avoided: GPIO 6–11 (flash), 12 (boot voltage strap), 2 (download-mode strap), ADC2 pins for analog (Wi-Fi uses ADC2).</p>`;
+    <p class="muted small">Never used: GPIO 6–11 (flash). GPIO 2 and 12 are boot straps, so they only get keys that pull to GND, never a pull-up. Analog only on ADC1 (Wi-Fi uses ADC2).</p>`;
   el.querySelector('tbody').addEventListener('click', (e) => {
     const id = e.target.closest('tr')?.dataset.part;
     if (id) onSelect(id);

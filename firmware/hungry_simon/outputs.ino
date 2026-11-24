@@ -49,9 +49,10 @@ void soundWin()            { soundPlayFx(FX_WIN, 6); }
 void soundError()          { soundPlayFx(FX_ERROR, 2); }
 void soundTickFx(bool hi)  { Beep b = {(uint16_t)(hi ? 1568 : 1047), 35}; soundPlayFx(&b, 1); }
 
-// ---------------------------------------------------------------- RGB LEDs (8 × WS2812B on one data pin)
-Adafruit_NeoPixel strip(8, PIN_LEDS, NEO_GRB + NEO_KHZ800);
-uint32_t ledShown[8];
+// ---------------------------------------------------------------- RGB LEDs (9 × WS2812B on one data pin)
+// LEDs 0..7 sit under the keys; LED 8 is the treat light at the dispenser outlet (same data chain).
+Adafruit_NeoPixel strip(NUM_LEDS, PIN_LEDS, NEO_GRB + NEO_KHZ800);
+uint32_t ledShown[NUM_LEDS];
 uint32_t flashColor = 0, flashUntil = 0;
 
 void ledsBegin() {
@@ -86,16 +87,28 @@ void ledsShow(uint32_t now) {
       changed = true;
     }
   }
-  if (changed) strip.show();                          // ~240 µs to clock 8 × 24 bits out    //@leds.show
+  uint32_t t = treatLightColor(now);                  // the 9th LED: the treat light
+  if (t != ledShown[LED_TREAT]) {
+    ledShown[LED_TREAT] = t;
+    strip.setPixelColor(LED_TREAT, t);
+    changed = true;
+  }
+  if (changed) strip.show();                          // ~270 µs to clock 9 × 24 bits out    //@leds.show
+}
+
+// Treat light: pulses orange while a treat waits for a hand, solid green while it drops.
+uint32_t treatLightColor(uint32_t now) {
+  if (ds != DS_IDLE) return 0x3DDC84;                 // dropping: solid green                //@light.drop
+  if (!offerPending) return 0;                        // nothing to give: off
+  float breath = 0.25f + 0.75f * (0.5f + 0.5f * sinf(now / 250.0f));   // ~1.6 s breathing     //@light.wait
+  return dimColor(0xFF8A1A, breath);
 }
 
 // ---------------------------------------------------------------- treat dispenser (SG90 servo)
 // A 50 Hz pulse of 0.5..2.4 ms sets the angle. Turning the paddle wheel 90° drops one treat.
 Servo wheel;
 const int SERVO_REST = 0, SERVO_DROP = 90;
-enum DispenseStep : uint8_t { DS_IDLE, DS_TURN, DS_WAIT_DROP };
-DispenseStep ds = DS_IDLE;
-uint32_t dsAt = 0;
+// (DispenseStep ds / dsAt are declared in hungry_simon.ino: the LED code above needs them)
 
 void servoBegin() {
   wheel.setPeriodHertz(50);
@@ -103,19 +116,39 @@ void servoBegin() {
   wheel.write(SERVO_REST);
 }
 
+// A win (or the web app) OFFERS a treat. It only drops once a hand is held under the outlet.
 bool treatDispense(const char* reason) {
   if (treatsToday >= settings.dailyTreatLimit) {                                            //@treat.limit
     Serial.printf("[treat] blocked: daily limit %d reached\n", settings.dailyTreatLimit);
     cloudPublish("treat/blocked", "{\"reason\":\"daily_limit\"}");
     return false;
   }
-  if (ds != DS_IDLE) return false;                    // already dispensing
-  Serial.printf("[treat] dispensing (%s)\n", reason);
+  if (offerPending || ds != DS_IDLE) return false;    // one treat at a time
+  offerPending = true;                                // light pulses, display says "hand under"  //@treat.offer
+  offerSince = millis();
+  Serial.printf("[treat] ready (%s): hold your hand under the outlet\n", reason);
+  return true;
+}
+
+// Called every loop(): drop the waiting treat when the ToF sensor sees a hand.
+void treatOfferTick(uint32_t now) {
+  if (!offerPending || ds != DS_IDLE) return;
+  if (handPresent) {                                                                         //@treat.hand
+    offerPending = false;
+    Serial.printf("[treat] hand detected at %d mm -> drop\n", tofMm);
+    treatDrop();
+  } else if (now - offerSince > OFFER_TIMEOUT_MS) {   // nobody took it: cancel, not counted
+    offerPending = false;
+    Serial.println("[treat] offer expired");                                                 //@treat.expired
+    cloudPublish("treat/expired", "{}");
+  }
+}
+
+void treatDrop() {
   dropSeen = false;
   wheel.write(SERVO_DROP);                            // turn the wheel: one treat falls       //@servo.dispense
   ds = DS_TURN;
   dsAt = millis();
-  return true;
 }
 
 void servoTick(uint32_t now) {
@@ -158,5 +191,6 @@ void outputsTick(uint32_t now) {
     fxNextAt = now + fx[fxPos].ms;
     if (++fxPos == fxLen) toneEndsAt = fxNextAt;
   }
+  treatOfferTick(now);
   servoTick(now);
 }

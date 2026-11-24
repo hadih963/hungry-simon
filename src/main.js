@@ -25,6 +25,8 @@ const dev = {
   treatsToday: 0,
   dailyLimit: 5,
   dispensing: false,
+  offer: null,          // treat waiting for a hand: { source, reason, since }
+  hand: false,          // a hand is under the outlet (ToF sensor)
   pendingRemote: 0,
   bootAt: performance.now(),
   lastActivity: performance.now(),
@@ -159,6 +161,7 @@ window.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea')) return;
   const i = KEYBOARD.indexOf(e.key.toLowerCase());
   if (i >= 0) { e.preventDefault(); keyEvent(i, true); }
+  else if (e.key.toLowerCase() === 'h') setHand(!dev.hand);
 });
 window.addEventListener('keyup', (e) => {
   const i = KEYBOARD.indexOf(e.key.toLowerCase());
@@ -188,6 +191,7 @@ function wake(reason) {
     { id: 'setup', serial: '[boot] Hungry Simon firmware v0.1' },
     { id: 'setup.wake', serial: '[boot] woken from deep sleep by the PIR sensor (ext0)' },
     'setup.cloud',
+    { id: 'tof.init', serial: `[tof] ready, bowl at ${TOF_BOWL_MM} mm` },
     { id: 'cloud.connect', serial: '[mqtt] connected over TLS, subscribed to cmd/#',
       note: 'Once Wi-Fi is up, loop() connects to the MQTT broker over TLS (port 8883) and subscribes to its command topics. The "last will" makes the broker announce "offline" if the device disappears.' },
     'setup.game',
@@ -211,6 +215,7 @@ function wake(reason) {
 function sleep(reason) {
   releaseAll();
   game.stop();
+  if (dev.offer) { dev.offer = null; device.setTreatLight?.(null); }
   trace('loop.sleep', { id: 'sleep.enter', serial: '[sleep] nobody here -> deep sleep' });
   publish('state', { awake: false, sleepReason: reason });
   trace('sleep.arm', 'sleep.start');
@@ -225,8 +230,12 @@ $('presence').addEventListener('click', () => setPresence(!dev.presence));
 $('sleep').addEventListener('click', () => { if (dev.awake) { setPresence(false); sleep('button'); } });
 
 // ------------------------------------------------------------------ treats
-async function dispense(source, reason) {
-  if (dev.dispensing) return;
+// A win or the web app OFFERS a treat; it only drops when the ToF sensor sees a hand under the outlet.
+const OFFER_TIMEOUT_MS = 60000;
+const TOF_BOWL_MM = 180;
+
+function dispense(source, reason) {
+  if (dev.dispensing || dev.offer) return;
   trace('treat.limit');
   if (dev.treatsToday >= dev.dailyLimit) {
     game.say('TREAT LIMIT', '#ffd60a', 1400);
@@ -235,33 +244,78 @@ async function dispense(source, reason) {
     setStatus(`No treat: the daily limit of ${dev.dailyLimit} is reached.`, true);
     return;
   }
+  dev.offer = { source, reason, since: performance.now() };
+  device.setTreatLight?.('#ff8a1a', 'pulse');
+  trace({ id: 'treat.offer', serial: `[treat] ready (${reason}): hold your hand under the outlet` }, 'light.wait', 'display.offer');
+  setStatus('Treat ready! Hold your hand under the dispenser: click below the outlet, use the ✋ button, or press H.');
+  if (dev.hand) setTimeout(() => takeOffer(), 150);   // a hand was already waiting there
+}
+
+// ToF sensor: a hand appears or disappears under the outlet
+function setHand(p) {
+  if (p === dev.hand) return;
+  audio.unlock();
+  dev.hand = p;
+  device.setHand?.(p);
+  $('hand').classList.toggle('on', p);
+  $('hand').textContent = p ? '✋ Take hand away' : '✋ Hand under outlet';
+  const mm = p ? 50 + Math.round(Math.random() * 25) : TOF_BOWL_MM + Math.round(Math.random() * 4 - 2);
+  device.setTofReading?.(mm, p);
+  if (!dev.awake) return;                     // asleep: the sensor isn't powered
+  dev.lastActivity = performance.now();
+  trace('tof.read', { id: 'tof.hand', serial: p ? `[tof] hand under the outlet (${mm} mm)` : `[tof] hand gone (${mm} mm)` });
+  if (p) takeOffer();
+}
+
+function takeOffer() {
+  if (!dev.offer || !dev.hand || dev.dispensing) return;
+  const { source, reason } = dev.offer;
+  dev.offer = null;
+  trace({ id: 'treat.hand', serial: '[treat] hand detected -> drop' });
+  drop(source, reason);
+}
+
+async function drop(source, reason) {
   if (dev.treatsLeft <= 0) {
+    device.setTreatLight?.(null);
     game.say('REFILL ME', '#ff9f1c', 1400);
-    trace({ id: 'servo.dispense', serial: `[treat] dispensing (${reason})` }, 'servo.back',
-      { id: 'treat.nodrop', serial: '[treat] no drop seen: reservoir empty or jammed' });
+    trace('servo.dispense', 'servo.back', { id: 'treat.nodrop', serial: '[treat] no drop seen: reservoir empty or jammed' });
     publish('alert/treat_empty', { confirmed: false });
     setStatus('No treat fell: the reservoir is empty (the IR drop sensor saw nothing).', true);
     return;
   }
   dev.dispensing = true;
-  trace({ id: 'servo.dispense', serial: `[treat] dispensing (${reason})` });
-  const landed = device.dispense();
+  device.setTreatLight?.('#3ddc84', 'solid');
+  trace('servo.dispense', 'light.drop');
+  const landed = device.dispense({ intoHand: dev.hand });
   setTimeout(() => trace('servo.back'), 350);
   await landed;
   dev.dispensing = false;
+  device.setTreatLight?.(null);
   dev.treatsLeft--;
   dev.treatsToday++;
   dev.stats.treatsDispensed++;
   device.setTreatLevel(dev.treatsLeft / CAPACITY);
   trace('sensors.drop', { id: 'treat.confirmed', serial: `[treat] drop confirmed by IR, ${dev.treatsToday} today` });
-  publish('treat/dispensed', { source, reason, dropConfirmedByIR: true, today: dev.treatsToday });
+  publish('treat/dispensed', { source, reason, intoHand: dev.hand, dropConfirmedByIR: true, today: dev.treatsToday });
   if (dev.treatsLeft <= LOW_LEVEL) {
     trace({ id: 'sensors.level', serial: '[treat] level LOW -> alert' });
     publish('alert/treat_low', { left: dev.treatsLeft, capacity: CAPACITY });
   }
-  setStatus(`Treat released (${reason}). ${dev.treatsLeft} left in the reservoir.`);
+  setStatus(`Treat released into ${dev.hand ? 'your hand' : 'the bowl'}. ${dev.treatsLeft} left in the reservoir.`);
   renderStats();
 }
+
+function expireOffer() {
+  dev.offer = null;
+  device.setTreatLight?.(null);
+  trace({ id: 'treat.expired', serial: '[treat] offer expired' });
+  publish('treat/expired', {});
+  setStatus('The treat offer expired: nobody held a hand under the outlet for 60 s.', true);
+}
+
+device.onHandToggle?.(() => setHand(!dev.hand));
+$('hand').addEventListener('click', () => setHand(!dev.hand));
 
 $('refill').addEventListener('click', () => {
   dev.treatsLeft = CAPACITY;
@@ -393,19 +447,21 @@ function frame(now) {
     }
   }
 
-  if (dev.awake && !dev.presence && !held.size && tracer.speed === 'realtime' && now - dev.lastActivity > SLEEP_AFTER_MS) sleep('idle');
+  if (dev.offer && now - dev.offer.since > OFFER_TIMEOUT_MS) expireOffer();
+  if (dev.awake && !dev.presence && !dev.offer && !held.size && tracer.speed === 'realtime' && now - dev.lastActivity > SLEEP_AFTER_MS) sleep('idle');
 
   display.render(now);
   requestAnimationFrame(frame);
 }
 
 // Debug handle for the team and automated tests
-window.hungrySimon = { game, dev, keyEvent, dispense, setMode, setPresence, selectPart, tracer, code };
+window.hungrySimon = { game, dev, keyEvent, dispense, setHand, setMode, setPresence, selectPart, tracer, code };
 
 // ------------------------------------------------------------------ boot
 device.setAwake(false);
 device.setTreatLevel(dev.treatsLeft / CAPACITY);
 device.setVolume(0.7);
+device.setTofReading?.(TOF_BOWL_MM, false);
 setStatus('Deep sleep. Click "Step in front" (or the PIR sensor on the device) to wake Hungry Simon.');
 tracer.serial('-- ESP32 is in deep sleep (≈10 µA). The PIR sensor will wake it. --');
 renderStats();

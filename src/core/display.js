@@ -72,6 +72,7 @@ export function createDisplay(canvas, game, getDevice) {
     ctx.fillRect(0, HIT_Y, W, 2);
 
     drawHud(dev);
+    if (dev.offer) drawOffer(now);
     drawMessages(now);
     text(`${Math.round(fps)} Hz`, W - 4, H - 6, { size: 7, color: '#ffffff55', align: 'right', weight: 400 });
   }
@@ -173,6 +174,17 @@ export function createDisplay(canvas, game, getDevice) {
       text(m.text, W / 2, 62 - age * 14 + i * 2, { size: 24, color: m.color, align: 'center', weight: 800 });
       ctx.globalAlpha = 1;
     });
+  }
+
+  function drawOffer(now) {
+    const pulse = 0.75 + 0.25 * Math.sin(now / 250);
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = '#ff8a1a';
+    roundRect(W / 2 - 150, 40, 300, 72, 12);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    text('TREAT READY!', W / 2, 62, { size: 22 * pulse + 4, color: '#1f2430', align: 'center', weight: 800 });
+    text('hold your hand under the outlet ✋', W / 2, 92, { size: 12, color: '#1f2430', align: 'center', weight: 600 });
   }
 
   function drawSleep(now) {

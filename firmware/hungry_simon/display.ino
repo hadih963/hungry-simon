@@ -68,5 +68,13 @@ void displayDraw(uint32_t now) {
   snprintf(hud, sizeof hud, "treats %d/%d  %05lu", treatsToday, settings.dailyTreatLimit, score);
   frame.drawString(hud, W - 2, 2, 1);
 
+  if (offerPending) {                    // a treat is waiting: tell the player what to do
+    frame.fillRoundRect(30, 40, 180, 44, 8, TFT_ORANGE);
+    frame.setTextDatum(MC_DATUM);
+    frame.setTextColor(TFT_BLACK);
+    frame.drawString("TREAT READY!", W / 2, 54, 2);
+    frame.drawString("hold your hand under it", W / 2, 72, 2);                               //@display.offer
+  }
+
   frame.pushSprite(0, 0);                // whole frame over SPI (40 MHz) in ≈ 7 ms              //@display.push
 }

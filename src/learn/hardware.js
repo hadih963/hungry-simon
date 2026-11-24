@@ -3,9 +3,11 @@
 // Board: LilyGO T-Display ESP32 (ESP32-D0WDQ6, 240x135 ST7789 TFT built in).
 
 export const PINS = {
-  KEYS: [13, 15, 17, 21, 22, 25, 36, 37], // Do..Do'  (36/37 are input-only: external 10k pull-ups)
+  KEYS: [13, 15, 17, 2, 12, 25, 36, 37],  // Do..Do'  (36/37 input-only: external 10k pull-ups; 2/12 strapping pins, OK for keys)
   SPEAKER: 26,     // LEDC PWM → PAM8302 amplifier → 8 Ω speaker
-  LEDS: 27,        // WS2812B data (via 74AHCT125 level shifter, 3.3 V → 5 V)
+  LEDS: 27,        // WS2812B data for 9 LEDs: 8 under the keys + the treat light (via 74AHCT125, 3.3 V → 5 V)
+  I2C_SDA: 21,     // I2C bus → TOF400C-VL53L1X
+  I2C_SCL: 22,
   SERVO: 32,       // SG90 control, 50 Hz PWM
   PIR: 33,         // HC-SR501 PIR output, RTC pin → wakes from deep sleep (ext0)
   IR_LEVEL: 39,    // IR obstacle module looking across the reservoir (LOW = treats present)
@@ -35,9 +37,9 @@ export const PARTS = [
   {
     id: 'leds', name: 'RGB LEDs under the keys', model: '8 × WS2812B addressable LEDs',
     pins: [PINS.LEDS], fn: 'leds.show',
-    what: 'One colour LED under each key. It shows which key to press next and gives feedback.',
+    what: 'One colour LED under each key. It shows which key to press next and gives feedback. A 9th LED on the same wire is the treat light.',
     how: 'WS2812B LEDs are daisy-chained. The ESP32 sends 24 bits (green, red, blue) per LED down one data wire with precise timing (800 kHz), and each LED keeps its own colour and passes the rest on. The firmware only sends new data when something changed. A 74AHCT125 converts the 3.3 V data signal to the 5 V the LEDs expect.',
-    specs: ['5 V, up to 60 mA each at full white', '1 data pin for all 8', '24-bit colour', 'Library: Adafruit_NeoPixel'],
+    specs: ['5 V, up to 60 mA each at full white', '1 data pin for all 9', '24-bit colour', 'Library: Adafruit_NeoPixel'],
   },
   {
     id: 'speaker', name: 'Speaker + amplifier', model: 'PAM8302 2.5 W class-D amp + 8 Ω 40 mm speaker',
@@ -66,6 +68,20 @@ export const PARTS = [
     what: 'Turns a paddle wheel under the treat reservoir, which drops one treat onto the slide.',
     how: 'A servo turns to the angle encoded in a 50 Hz pulse: about 0.5 ms = 0° and 2.4 ms = 180°. To dispense, the firmware moves the wheel 90° and back, which pushes exactly one compartment\'s treat out. The servo sits inside a closed housing so fingers and paws can\'t reach it.',
     specs: ['4.8–6 V, stall ≈ 650 mA', '50 Hz PWM, 0.5–2.4 ms', '≈ 0.1 s / 60°', 'Library: ESP32Servo'],
+  },
+  {
+    id: 'tof', name: 'Hand sensor (time of flight)', model: 'TOF400C-VL53L1X module (ST VL53L1X, I2C)',
+    pins: [PINS.I2C_SDA, PINS.I2C_SCL], fn: 'tof.read',
+    what: 'Looks down from the treat outlet. When you hold your hand under it, the waiting treat drops into your hand.',
+    how: 'The VL53L1X fires invisible 940 nm laser pulses and times how long the light takes to bounce back. Light travels about 30 cm per nanosecond, so the chip measures picosecond delays to get millimetres. It talks to the ESP32 over I2C (two wires, SDA and SCL, address 0x29). At start-up the firmware measures the distance to the empty bowl. Two readings in a row that are at least 5 cm closer mean a hand.',
+    specs: ['Range up to 4 m (Short mode ≈ 1.3 m)', '27° field of view', '20 measurements per second (33 ms budget)', 'I2C address 0x29, 400 kHz', '3.3–5 V, ≈ 20 mA while ranging', 'Library: VL53L1X by Pololu'],
+  },
+  {
+    id: 'treatLight', name: 'Treat light', model: 'WS2812B LED at the outlet (9th LED on the chain)',
+    pins: [PINS.LEDS], fn: 'light.wait',
+    what: 'Tells you a treat is waiting: it pulses orange until you hold your hand under the outlet, then turns green while the treat drops.',
+    how: 'It is simply one more WS2812B LED at the end of the key-LED chain: the data wire continues from the last key LED to this one. So it needs no extra GPIO. The firmware computes its colour every loop(): a slow sine wave on the brightness makes it "breathe".',
+    specs: ['Same data wire as the key LEDs (GPIO 27)', 'Index 8 in the chain', 'Pulse ≈ 1.6 s'],
   },
   {
     id: 'irLevel', name: 'Treat level sensor', model: 'IR obstacle module (TCRT5000-style) across the reservoir',
@@ -115,8 +131,9 @@ export const FLOW = {
     { id: 'irLevel', label: 'IR level', sub: 'GPIO 39', side: 'in' },
     { id: 'irDrop', label: 'IR drop', sub: 'GPIO 38', side: 'in' },
     { id: 'battery', label: 'Battery', sub: 'GPIO 34 (ADC)', side: 'in' },
+    { id: 'tof', label: 'ToF sensor', sub: 'I2C 21 · 22', side: 'in' },
     { id: 'esp32', label: 'ESP32', sub: 'setup() · loop()', side: 'core' },
-    { id: 'leds', label: 'RGB LEDs', sub: 'GPIO 27', side: 'out' },
+    { id: 'leds', label: 'RGB LEDs', sub: 'GPIO 27 · 9 LEDs', side: 'out' },
     { id: 'speaker', label: 'Speaker', sub: 'GPIO 26 (PWM)', side: 'out' },
     { id: 'display', label: 'Display', sub: 'SPI', side: 'out' },
     { id: 'servo', label: 'Servo', sub: 'GPIO 32 (PWM)', side: 'out' },
@@ -130,6 +147,7 @@ export const FLOW = {
     { id: 'irLevel-esp32', from: 'irLevel', to: 'esp32' },
     { id: 'irDrop-esp32', from: 'irDrop', to: 'esp32' },
     { id: 'battery-esp32', from: 'battery', to: 'esp32' },
+    { id: 'tof-esp32', from: 'tof', to: 'esp32' },
     { id: 'esp32-leds', from: 'esp32', to: 'leds' },
     { id: 'esp32-speaker', from: 'esp32', to: 'speaker' },
     { id: 'esp32-display', from: 'esp32', to: 'display' },
@@ -146,13 +164,15 @@ export const PIN_TABLE = [
   [13, 'Key Do', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
   [15, 'Key Re', 'keys', 'in', 'GPIO', 'strapping pin: fine with a pull-up'],
   [17, 'Key Mi', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
-  [21, 'Key Fa', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
-  [22, 'Key Sol', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [2, 'Key Fa', 'keys', 'in', 'GPIO', 'strapping pin: key to GND only, no external pull-up'],
+  [12, 'Key Sol', 'keys', 'in', 'GPIO', 'strapping pin: key to GND only, no external pull-up'],
   [25, 'Key La', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
   [36, 'Key Si', 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
   [37, "Key Do'", 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
   [26, 'Speaker', 'speaker', 'out', 'LEDC PWM', 'square wave to the PAM8302 amp'],
-  [27, 'LED data', 'leds', 'out', 'RMT / bit-bang', 'WS2812B via a 74AHCT125 level shifter'],
+  [27, 'LED data', 'leds', 'out', 'RMT / bit-bang', '9 × WS2812B (8 keys + treat light) via a 74AHCT125'],
+  [21, 'I2C SDA', 'tof', 'in/out', 'I2C', 'TOF400C-VL53L1X (module has its own pull-ups)'],
+  [22, 'I2C SCL', 'tof', 'out', 'I2C', 'TOF400C-VL53L1X, 400 kHz'],
   [32, 'Servo', 'servo', 'out', 'LEDC PWM 50 Hz', 'SG90 on 5 V, shared GND'],
   [33, 'PIR', 'pir', 'in', 'GPIO + RTC', 'ext0 deep-sleep wake-up'],
   [39, 'IR level', 'irLevel', 'in', 'GPIO', 'input-only; module drives the line'],

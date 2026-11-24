@@ -6,6 +6,8 @@ const def = (name) => Number(ino.match(new RegExp(`#define\\s+${name}\\s+(\\d+)`
 const keys = ino.match(/KEY_PINS\[8\]\s*=\s*\{([^}]*)\}/)[1].split(',').map(Number);
 const checks = [
   ['KEYS', JSON.stringify(keys), JSON.stringify(PINS.KEYS)],
+  ['I2C_SDA', def('PIN_I2C_SDA'), PINS.I2C_SDA],
+  ['I2C_SCL', def('PIN_I2C_SCL'), PINS.I2C_SCL],
   ...['SPEAKER', 'LEDS', 'SERVO', 'PIR', 'IR_LEVEL', 'IR_DROP', 'BATTERY', 'BTN_MODE', 'BTN_OPTION']
     .map((k) => [k, def(`PIN_${k}`), PINS[k]]),
 ];

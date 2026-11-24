@@ -52,6 +52,16 @@ device.highlightPart(partId);               // outline/glow one part (null = non
 //          'pir', 'servo', 'irLevel', 'irDrop', 'battery', 'buttons', 'wifi'
 ```
 
+Added in round 3 (hand-triggered treats: VL53L1X ToF sensor + treat light):
+```js
+device.setHand(isPresent);                  // show/hide a hand held under the dispenser outlet
+device.onHandToggle(cb);                    // user clicked the area under the outlet / the hand; cb()
+device.setTofReading(mm, isHand);           // ToF beam: show the measured distance; beam turns orange when isHand
+device.setTreatLight(color, mode);          // treat light at the outlet (9th WS2812B): color or null (off); mode 'pulse' | 'solid'
+device.dispense({ intoHand });              // as before, but when intoHand the treat lands in the hand, not the bowl
+// new partIds: 'tof' (TOF400C-VL53L1X module under the outlet), 'treatLight'
+```
+
 ## Signal-flow diagram contract (`src/visuals/flow.js`, owner GPT)
 Data comes from `FLOW` in `src/learn/hardware.js` (nodes have `side`: in | core | out | cloud).
 ```js
