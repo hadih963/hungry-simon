@@ -13,8 +13,8 @@ hardware exists. See `README.md` for the product summary.
 ## Who owns what (only edit your own files; ask in a commit message / PR if you need a change elsewhere)
 | Area | Owner | Files |
 |---|---|---|
-| Game logic, audio, songs, falling-notes display, app wiring, control panel | Claude | `index.html`, `styles/app.css`, `src/main.js`, `src/core/**` |
-| Device visuals (instrument body, keys, LEDs, display bezel, sensors, treat dispenser) | GPT (Codex) | `src/visuals/**`, `styles/device.css` |
+| Game logic, audio, songs, falling-notes display, app wiring, control panel | Claude | `index.html`, `styles/app.css`, `src/main.js`, `src/core/**`, `src/learn/**`, `firmware/**`, `tools/**` |
+| Device visuals + signal-flow diagram | GPT (Codex) | `src/visuals/**`, `styles/device.css`, `styles/flow.css` |
 | Technical report text, reviews, diagrams-as-text | Gemini (via Hadi) | `docs/gemini-output/**` |
 | Prompts for Gemini | Claude | `docs/gemini-prompts/**` |
 
@@ -43,5 +43,28 @@ device.setPetMode(isPet);                   // pet mode: keys are merged pairwis
 device.setVolume(v);                        // 0..1, optional speaker-grille animation strength
 device.pulseSpeaker();                      // a note was played (speaker grille pulse)
 ```
+
+Added in round 2 (learning layer):
+```js
+device.onPartClick(cb);                     // user clicked a part; cb(partId)
+device.highlightPart(partId);               // outline/glow one part (null = none). Called while the firmware trace runs.
+// partIds: 'esp32' (the T-Display board = the display module), 'keys', 'leds', 'speaker', 'display',
+//          'pir', 'servo', 'irLevel', 'irDrop', 'battery', 'buttons', 'wifi'
+```
+
+## Signal-flow diagram contract (`src/visuals/flow.js`, owner GPT)
+Data comes from `FLOW` in `src/learn/hardware.js` (nodes have `side`: in | core | out | cloud).
+```js
+import { createFlow } from './visuals/flow.js';
+const flow = createFlow(rootElement, FLOW);
+flow.pulse(id, ms);   // id = node id (glow) or edge id like 'keys-esp32' (a dot travels from → to along the wire)
+flow.onSelect(cb);    // user clicked a node; cb(nodeId)
+flow.select(id);      // persistent selection outline (null = none)
+```
+
+## Firmware & trace
+`firmware/hungry_simon/*.ino` is real Arduino-ESP32 firmware (owner Claude). Lines tagged `//@trace-id`
+are what the code viewer highlights when the simulator emits that trace id. Pins must match `PINS`
+in `src/learn/hardware.js` (`node tools/check-pins.mjs`).
 
 Key colours (Do→Do'): `#ff4d4d #ff9f1c #ffd60a #3ddc84 #2ec4b6 #3a86ff #8338ec #ff5fa2`.
