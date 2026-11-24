@@ -26,7 +26,7 @@ const dev = {
   dailyLimit: 5,
   dispensing: false,
   offer: null,          // treat waiting for a hand: { source, reason, since }
-  hand: false,          // a hand is under the outlet (ToF sensor)
+  hand: false,          // a hand is under the chute (ToF sensor)
   pendingRemote: 0,
   bootAt: performance.now(),
   lastActivity: performance.now(),
@@ -64,11 +64,15 @@ const partsPanel = createPartsPanel($('partsPanel'), {
 });
 const pinoutPanel = createPinoutPanel($('pinoutPanel'), { onSelect: (id) => selectPart(id, false) });
 
+// part ids vs. diagram node ids: a few parts share a node in the signal-flow diagram
+const FLOW_NODE = { power: 'battery', amp: 'speaker', treatLight: 'leds' };
+const PART_OF_NODE = { webapp: 'wifi', battery: 'power' };
+
 function selectPart(id, openParts = true) {
-  if (id === 'webapp') id = 'wifi';
+  id = PART_OF_NODE[id] || id;
   partsPanel.show(id);
   pinoutPanel.show(id);
-  flow.select(id);
+  flow.select(FLOW_NODE[id] || id);
   tracer.setSelectedPart(id);
   if (openParts) {
     showTab('parts');
@@ -191,7 +195,7 @@ function wake(reason) {
     { id: 'setup', serial: '[boot] Hungry Simon firmware v0.1' },
     { id: 'setup.wake', serial: '[boot] woken from deep sleep by the PIR sensor (ext0)' },
     'setup.cloud',
-    { id: 'tof.init', serial: `[tof] ready, bowl at ${TOF_BOWL_MM} mm` },
+    { id: 'tof.init', serial: `[tof] ready, bowl at ${TOF_BOWL_MM} mm (centre zone)` },
     { id: 'cloud.connect', serial: '[mqtt] connected over TLS, subscribed to cmd/#',
       note: 'Once Wi-Fi is up, loop() connects to the MQTT broker over TLS (port 8883) and subscribes to its command topics. The "last will" makes the broker announce "offline" if the device disappears.' },
     'setup.game',
@@ -230,7 +234,7 @@ $('presence').addEventListener('click', () => setPresence(!dev.presence));
 $('sleep').addEventListener('click', () => { if (dev.awake) { setPresence(false); sleep('button'); } });
 
 // ------------------------------------------------------------------ treats
-// A win or the web app OFFERS a treat; it only drops when the ToF sensor sees a hand under the outlet.
+// A win or the web app OFFERS a treat; it only drops when the ToF sensor sees a hand under the chute.
 const OFFER_TIMEOUT_MS = 60000;
 const TOF_BOWL_MM = 180;
 
@@ -246,24 +250,24 @@ function dispense(source, reason) {
   }
   dev.offer = { source, reason, since: performance.now() };
   device.setTreatLight?.('#ff8a1a', 'pulse');
-  trace({ id: 'treat.offer', serial: `[treat] ready (${reason}): hold your hand under the outlet` }, 'light.wait', 'display.offer');
-  setStatus('Treat ready! Hold your hand under the dispenser: click below the outlet, use the ✋ button, or press H.');
+  trace({ id: 'treat.offer', serial: `[treat] ready (${reason}): hold your hand under the chute` }, 'light.wait', 'display.offer');
+  setStatus('Treat ready! Hold your hand under the chute: click below it, use the ✋ button, or press H.');
   if (dev.hand) setTimeout(() => takeOffer(), 150);   // a hand was already waiting there
 }
 
-// ToF sensor: a hand appears or disappears under the outlet
+// ToF sensor: a hand appears or disappears under the chute
 function setHand(p) {
   if (p === dev.hand) return;
   audio.unlock();
   dev.hand = p;
   device.setHand?.(p);
   $('hand').classList.toggle('on', p);
-  $('hand').textContent = p ? '✋ Take hand away' : '✋ Hand under outlet';
+  $('hand').textContent = p ? '✋ Take hand away' : '✋ Hand under chute';
   const mm = p ? 50 + Math.round(Math.random() * 25) : TOF_BOWL_MM + Math.round(Math.random() * 4 - 2);
   device.setTofReading?.(mm, p);
   if (!dev.awake) return;                     // asleep: the sensor isn't powered
   dev.lastActivity = performance.now();
-  trace('tof.read', { id: 'tof.hand', serial: p ? `[tof] hand under the outlet (${mm} mm)` : `[tof] hand gone (${mm} mm)` });
+  trace('tof.read', { id: 'tof.hand', serial: p ? `[tof] hand under the chute (${mm} mm, 9 zones)` : `[tof] hand gone (${mm} mm, 0 zones)` });
   if (p) takeOffer();
 }
 
@@ -311,7 +315,7 @@ function expireOffer() {
   device.setTreatLight?.(null);
   trace({ id: 'treat.expired', serial: '[treat] offer expired' });
   publish('treat/expired', {});
-  setStatus('The treat offer expired: nobody held a hand under the outlet for 60 s.', true);
+  setStatus('The treat offer expired: nobody held a hand under the chute for 60 s.', true);
 }
 
 device.onHandToggle?.(() => setHand(!dev.hand));

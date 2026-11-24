@@ -1,20 +1,21 @@
-// ================================================================= keys.ino: 8 piano keys + 2 buttons
-// A key connects its pin to GND, so: pressed = LOW, released = HIGH (pull-up).
+// ================================================================= keys.ino: 8 piano keys + the BOOT button
+// Each hinged key presses a KW11-3Z lever microswitch: COM to GND, NO to the GPIO.
+// So: pressed = LOW, released = HIGH (internal pull-up).
 // Metal contacts "bounce" for a few ms, so a new level only counts once it has been stable for 15 ms.
 
 const uint16_t DEBOUNCE_MS = 15;
 
 Debounce keyDb[8];        // struct Debounce is declared in hungry_simon.ino
-Debounce btnModeDb   = {HIGH, HIGH, 0};
-Debounce btnOptionDb = {HIGH, HIGH, 0};
+Debounce btnModeDb = {HIGH, HIGH, 0};
+uint32_t btnDownAt = 0;
+const uint16_t LONG_PRESS_MS = 800;
 
 void keysBegin() {
   for (int i = 0; i < 8; i++) {
-    pinMode(KEY_PINS[i], INPUT_PULLUP);   // GPIO 36/37 have no internal pull-up: 10k resistor on the board
+    pinMode(KEY_PINS[i], INPUT_PULLUP);   // all 8 key pins have an internal pull-up
     keyDb[i] = {HIGH, HIGH, 0};
   }
-  pinMode(PIN_BTN_MODE, INPUT_PULLUP);
-  pinMode(PIN_BTN_OPTION, INPUT);         // has an external pull-up on the T-Display
+  pinMode(PIN_BTN_MODE, INPUT_PULLUP);    // BOOT button on the DevKit (also used to enter flash mode)
 }
 
 // Returns true exactly once when the input settles on a new level.
@@ -54,17 +55,18 @@ void onKeyUp(int k, uint32_t now) {
   soundNoteOff(k);
 }
 
+// The DevKit V1 has one free button (BOOT): a short press = next mode, a long press = difficulty.
 void buttonsScan(uint32_t now) {
-  if (debounce(btnModeDb, digitalRead(PIN_BTN_MODE), now) && btnModeDb.stable == LOW) {
+  if (!debounce(btnModeDb, digitalRead(PIN_BTN_MODE), now)) return;
+  if (btnModeDb.stable == LOW) { btnDownAt = now; return; }        // pressed: start timing
+  lastActivityMs = now;
+  if (now - btnDownAt < LONG_PRESS_MS) {                           // released after a short press
     Mode next = (Mode)((mode + 1) % 4);
     Serial.printf("[button] mode -> %s\n", MODE_NAMES[next]);                               //@buttons.mode
-    lastActivityMs = now;
     gameStart(next);
-  }
-  if (debounce(btnOptionDb, digitalRead(PIN_BTN_OPTION), now) && btnOptionDb.stable == LOW) {
+  } else {                                                         // released after a long press
     settings.difficulty = (Difficulty)((settings.difficulty + 1) % 3);
     Serial.printf("[button] difficulty -> %d\n", settings.difficulty);                      //@buttons.option
-    lastActivityMs = now;
     gameStart(mode);
   }
 }

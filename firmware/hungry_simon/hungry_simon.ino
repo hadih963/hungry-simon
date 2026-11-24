@@ -2,19 +2,20 @@
  * Hungry Simon: ESP32 rhythm instrument firmware
  * Project Group 9 · ACS_1C 2026/2027 · The Hague University of Applied Sciences
  *
- * Board:     LilyGO T-Display ESP32 (240x135 ST7789 TFT built in)
- * Core:      Arduino-ESP32 3.x
- * Libraries: TFT_eSPI (select Setup25_TTGO_T_Display), Adafruit NeoPixel, ESP32Servo,
- *            PubSubClient, ArduinoJson 7, VL53L1X (by Pololu)
+ * Board:     DOIT ESP32 DevKit V1 (ESP32-WROOM-32, 4 MB flash)       parts: docs/components.md
+ * Core:      Arduino-ESP32 3.x (includes ESP_I2S and LittleFS)
+ * Libraries: TFT_eSPI (use firmware/User_Setup_HungrySimon.h), Adafruit NeoPixel, ESP32Servo,
+ *            PubSubClient, ArduinoJson 7, STM32duino VL53L7CX
  *
  * The sketch is split into tabs; Arduino joins them in this order:
  *   hungry_simon.ino  pins, types, setup(), loop()
+ *   audio.ino         MAX98357A over I2S: recorded clips from flash + synthesised notes
  *   cloud.ino         Wi-Fi + MQTT over TLS
- *   display.ino       falling-notes screen
+ *   display.ino       falling notes on the 2.8" ILI9341 (320x240)
  *   game.ino          free play / Simon says / song challenge / pet mode
- *   keys.ino          8 keys + 2 buttons, debouncing
- *   outputs.ino       speaker, RGB LEDs, treat servo
- *   sensors.ino       PIR presence, ToF hand sensor, IR treat sensors, battery, deep sleep
+ *   keys.ino          8 lever-microswitch keys + the BOOT button, debouncing
+ *   outputs.ino       9 WS2812 LED sticks, treat offer, MG90S servo
+ *   sensors.ino       PIR presence, VL53L7CX hand sensor, IR treat sensors, battery, deep sleep
  *
  * Lines ending in //@name are highlighted by the browser simulator when that step runs.
  */
@@ -26,25 +27,33 @@
 #include <Adafruit_NeoPixel.h>
 #include <ESP32Servo.h>
 #include <Wire.h>
-#include <VL53L1X.h>      // Pololu VL53L1X library (TOF400C-VL53L1X module)
-#include "secrets.h"   // copy secrets.h.example → secrets.h and fill in (never commit it)
+#include <vl53l7cx_class.h>   // STM32duino VL53L7CX library (8x8 multizone time of flight)
+#include <ESP_I2S.h>          // I2S audio output (Arduino-ESP32 3.x)
+#include <LittleFS.h>         // sound clips stored in flash
+#include "secrets.h"          // copy secrets.h.example → secrets.h and fill in (never commit it)
 
 // ---------------------------------------------------------------- pins (match src/learn/hardware.js)
-const uint8_t KEY_PINS[8] = {13, 15, 17, 2, 12, 25, 36, 37};   // Do .. Do'; 36/37 need external 10k pull-ups
-// GPIO 2 and 12 are boot-strapping pins: fine for keys that only pull to GND (no external pull-up!)
-#define PIN_SPEAKER     26   // LEDC PWM → PAM8302 amplifier
-#define PIN_LEDS        27   // WS2812B data (through a 74AHCT125 level shifter)
-#define PIN_SERVO       32   // SG90 treat wheel
-#define PIN_PIR         33   // HC-SR501, RTC pin → can wake the ESP32 from deep sleep
+// Every usable GPIO of the DevKit V1 is assigned: see docs/components.md "Pin budget".
+const uint8_t KEY_PINS[8] = {13, 14, 27, 32, 33, 15, 2, 12};   // Do .. Do'  (lever microswitches to GND)
+// GPIO 2, 12 and 15 are boot-strapping pins: fine for keys that only pull to GND (no external pull-ups!)
+#define PIN_LEDS        16   // WS2812 data for all 9 sticks (through a 74AHCT125 + 330 Ω)
+#define PIN_SERVO       17   // MG90S treat wheel
+#define PIN_I2S_BCLK    26   // MAX98357A bit clock
+#define PIN_I2S_LRC     25   // MAX98357A left/right (word) clock
+#define PIN_I2S_DOUT    22   // MAX98357A data in
+#define PIN_I2C_SDA     21   // VL53L7CX hand sensor under the chute
+#define PIN_I2C_SCL     19
+#define PIN_PIR         36   // HC-SR501, RTC pin → can wake the ESP32 from deep sleep
 #define PIN_IR_LEVEL    39   // IR module across the reservoir: HIGH = no treats at the low mark
-#define PIN_IR_DROP     38   // IR module at the slide: LOW pulse = a treat passed
-#define PIN_BATTERY     34   // battery divider on the T-Display (×2)
-#define PIN_BTN_MODE     0   // built-in button
-#define PIN_BTN_OPTION  35   // built-in button
-#define PIN_I2C_SDA     21   // I2C bus: TOF400C-VL53L1X distance sensor under the treat outlet
-#define PIN_I2C_SCL     22
-#define NUM_LEDS         9   // 8 key LEDs + 1 treat light at the outlet, all on PIN_LEDS
-#define LED_TREAT        8   // index of the treat light in the LED chain
+#define PIN_IR_DROP     35   // IR module at the chute: LOW pulse = a treat passed
+#define PIN_BATTERY     34   // 2S pack through a 100k/33k divider
+#define PIN_BTN_MODE     0   // BOOT button on the DevKit: short press = mode, long press = difficulty
+// The ILI9341 display uses SCK 18, MOSI 23, CS 5, DC 4 (set in User_Setup_HungrySimon.h).
+
+#define LEDS_PER_STICK   8
+#define NUM_STICKS       9   // 8 keys + 1 chute stick (the 10th stick is a spare)
+#define NUM_LEDS        (LEDS_PER_STICK * NUM_STICKS)   // 72
+#define STICK_TREAT      8   // the chute stick = the treat light
 
 // ---------------------------------------------------------------- music
 const uint16_t NOTE_HZ[8]    = {262, 294, 330, 349, 392, 440, 494, 523};
@@ -106,12 +115,12 @@ uint32_t noteTimeMs[64];          // when each note should be played, relative t
 // sensor state (written by sensors.ino)
 bool presence = false;
 bool treatLevelLow = false;
-float batteryV = 4.0f;            // volts, measured every 10 s
+float batteryV = 7.4f;            // 2S pack volts, measured every 10 s
 volatile bool dropSeen = false;   // set by the IR drop interrupt
-uint16_t tofMm = 0;               // last ToF distance under the outlet, in mm
-bool handPresent = false;         // a hand (or a snout) is under the outlet
+uint16_t tofMm = 0;               // nearest distance in the chute zones of the 8x8 grid, in mm
+bool handPresent = false;         // a hand (or a snout) is under the chute
 
-// treat offer: after a win the treat waits until a hand is held under the outlet
+// treat offer: after a win the treat waits until a hand is held under the chute
 bool offerPending = false;
 uint32_t offerSince = 0;
 const uint32_t OFFER_TIMEOUT_MS = 60000;
@@ -137,12 +146,12 @@ void setup() {                                                                  
     Serial.println("[boot] woken from deep sleep by the PIR sensor (ext0)");      //@setup.wake
   }
 
-  keysBegin();      // INPUT_PULLUP on the 8 keys and 2 buttons
-  ledsBegin();      // WS2812B strip, all off
-  soundBegin();     // LEDC PWM on the speaker pin
-  displayBegin();   // TFT + an off-screen sprite (frame buffer)
-  servoBegin();     // SG90 to its rest angle
-  sensorsBegin();   // PIR, IR level, IR drop (interrupt), battery ADC, ToF over I2C
+  keysBegin();      // INPUT_PULLUP on the 8 keys and the BOOT button
+  ledsBegin();      // 9 WS2812 sticks, all off
+  soundBegin();     // I2S to the MAX98357A + audio task, sound clips from LittleFS
+  displayBegin();   // ILI9341 + an off-screen sprite (frame buffer)
+  servoBegin();     // MG90S to its rest angle
+  sensorsBegin();   // PIR, IR level, IR drop (interrupt), battery ADC, VL53L7CX over I2C
   cloudBegin();     // starts Wi-Fi + MQTT over TLS in the background            //@setup.cloud
 
   lastActivityMs = millis();
@@ -155,12 +164,12 @@ void loop() {                                                                   
   uint32_t now = millis();
 
   keysScan(now);      // read + debounce keys → onKeyDown() / onKeyUp()          //@loop.keys
-  buttonsScan(now);   // mode / difficulty buttons                                //@loop.buttons
-  sensorsPoll(now);   // presence, treat level, treat drop, battery              //@loop.sensors
+  buttonsScan(now);   // BOOT button: short = mode, long = difficulty            //@loop.buttons
+  sensorsPoll(now);   // presence, hand under the chute, treat level, battery    //@loop.sensors
   gameTick(now);      // Simon playback, count-in, missed notes                  //@loop.game
-  outputsTick(now);   // end timed notes, sound effects, servo steps             //@loop.outputs
+  outputsTick(now);   // treat offer + servo steps (sound runs in its own task)  //@loop.outputs
   ledsShow(now);      // push LED colours to the strip if anything changed       //@loop.leds
-  displayDraw(now);   // redraw the screen every 40 ms (25 Hz)                   //@loop.display
+  // the screen redraws itself 25× a second in its own task (display.ino)    //@loop.display
   cloudLoop(now);     // keep MQTT alive, receive commands                       //@loop.cloud
   sleepCheck(now);    // nobody around for a while → deep sleep                  //@loop.sleep
 }

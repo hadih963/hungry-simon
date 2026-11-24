@@ -1,11 +1,11 @@
-// Renders the device's display (480x160) — falling notes, Simon status, free-play trail.
+// Renders the device's display: a 2.8" ILI9341, 320x240 — falling notes, Simon status, free-play trail.
 import { KEY_COLORS, KEY_NAMES, PET_KEYS } from './notes.js';
 import { FALL_MS } from './game.js';
 
-const W = 480;
-const H = 160;
-const HUD = 18;          // top status bar height
-const HIT_Y = 138;       // hit line
+const W = 320;
+const H = 240;
+const HUD = 22;          // top status bar height
+const HIT_Y = 212;       // hit line (same numbers as display.ino)
 const MODE_LABEL = { free: 'FREE PLAY', simon: 'SIMON SAYS', song: 'SONG', pet: 'PET MODE' };
 
 export function createDisplay(canvas, game, getDevice) {
@@ -80,13 +80,13 @@ export function createDisplay(canvas, game, getDevice) {
   function drawHud(dev) {
     ctx.fillStyle = '#060912';
     ctx.fillRect(0, 0, W, HUD);
-    text(MODE_LABEL[game.mode], 6, HUD / 2, { size: 10, color: '#ff8a3d' });
+    text(MODE_LABEL[game.mode], 6, HUD / 2, { size: 11, color: '#ff8a3d' });
     let mid = game.player;
     if (game.mode === 'song' && game.song) mid = game.song.title;
     if (game.isSimon && game.seq?.length) mid = `${game.seq.length}/${game.goal} notes`;
-    text(mid, W / 2, HUD / 2, { size: 9, color: '#c7d0e0', align: 'center', weight: 500 });
+    text(mid.length > 22 ? mid.slice(0, 21) + '…' : mid, W / 2 + 6, HUD / 2, { size: 10, color: '#c7d0e0', align: 'center', weight: 500 });
     const treat = `🍬${dev.treatsToday}/${dev.dailyLimit}`;
-    text(`${treat}  ${String(game.score).padStart(5, '0')}`, W - 6, HUD / 2, { size: 10, align: 'right' });
+    text(`${treat}  ${String(game.score).padStart(5, '0')}`, W - 6, HUD / 2, { size: 11, align: 'right' });
   }
 
   function drawSong(now, laneW) {
@@ -112,11 +112,11 @@ export function createDisplay(canvas, game, getDevice) {
       ctx.globalAlpha = 1;
     });
     if (game.state === 'countin' && game.countBeat > 0 && t < 0) {
-      text(String(game.countBeat), W / 2, 72, { size: 44, color: '#ffffffdd', align: 'center', weight: 800 });
+      text(String(game.countBeat), W / 2, 115, { size: 64, color: '#ffffffdd', align: 'center', weight: 800 });
     }
     if (game.state === 'won') {
-      text('SONG COMPLETE', W / 2, 62, { size: 22, color: '#3ddc84', align: 'center', weight: 800 });
-      text(`avg timing ±${game.avgOffsetMs} ms · press a key to replay`, W / 2, 90, { size: 10, align: 'center', weight: 500 });
+      text('SONG COMPLETE', W / 2, 100, { size: 26, color: '#3ddc84', align: 'center', weight: 800 });
+      text(`avg timing ±${game.avgOffsetMs} ms · press a key to replay`, W / 2, 135, { size: 11, align: 'center', weight: 500 });
     }
     // progress bar
     const p = game.idx / game.chart.length;
@@ -136,7 +136,7 @@ export function createDisplay(canvas, game, getDevice) {
       ctx.fillRect(i * laneW, HUD, laneW, HIT_Y - HUD);
     }
     const label = { ready: 'GET READY', watch: 'WATCH & LISTEN', input: 'YOUR TURN!', done: '', fail: '', won: '' }[game.state] || '';
-    if (label) text(label, W / 2, 46, { size: 18, align: 'center', weight: 800, color: game.state === 'input' ? '#ffd60a' : '#e9eef7' });
+    if (label) text(label, W / 2, 80, { size: 24, align: 'center', weight: 800, color: game.state === 'input' ? '#ffd60a' : '#e9eef7' });
     // progress dots
     const n = game.seq?.length || 0;
     const size = Math.min(14, (W - 40) / Math.max(n, 1) - 4);
@@ -145,10 +145,10 @@ export function createDisplay(canvas, game, getDevice) {
       const x = W / 2 - total / 2 + i * (size + 4);
       const done = game.state === 'input' ? i < game.pos : game.state === 'done' || game.state === 'won';
       ctx.fillStyle = done ? KEY_COLORS[game.seq[i]] : '#ffffff22';
-      roundRect(x, 78, size, size, size / 2);
+      roundRect(x, 125, size, size, size / 2);
       ctx.fill();
     }
-    text(`goal ${game.goal} · wins ${game.wins || 0}`, W / 2, 108, { size: 9, color: '#8a96ad', align: 'center', weight: 500 });
+    text(`goal ${game.goal} · wins ${game.wins || 0}`, W / 2, 170, { size: 11, color: '#8a96ad', align: 'center', weight: 500 });
   }
 
   function drawFree(now, laneW) {
@@ -164,14 +164,14 @@ export function createDisplay(canvas, game, getDevice) {
       roundRect(x + 8, Math.max(HUD, yTop), laneW - 16, Math.max(4, yBot - Math.max(HUD, yTop)), 4);
       ctx.fill();
     });
-    if (!game.trail.length) text('play anything ♪', W / 2, 70, { size: 14, color: '#8a96ad', align: 'center', weight: 500 });
+    if (!game.trail.length) text('play anything ♪', W / 2, 115, { size: 18, color: '#8a96ad', align: 'center', weight: 500 });
   }
 
   function drawMessages(now) {
     game.messages.forEach((m, i) => {
       const age = (now - m.t0) / m.ms;
       ctx.globalAlpha = Math.max(0, 1 - age * age);
-      text(m.text, W / 2, 62 - age * 14 + i * 2, { size: 24, color: m.color, align: 'center', weight: 800 });
+      text(m.text, W / 2, 110 - age * 18 + i * 2, { size: 30, color: m.color, align: 'center', weight: 800 });
       ctx.globalAlpha = 1;
     });
   }
@@ -180,17 +180,17 @@ export function createDisplay(canvas, game, getDevice) {
     const pulse = 0.75 + 0.25 * Math.sin(now / 250);
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = '#ff8a1a';
-    roundRect(W / 2 - 150, 40, 300, 72, 12);
+    roundRect(W / 2 - 140, 75, 280, 84, 12);
     ctx.fill();
     ctx.globalAlpha = 1;
-    text('TREAT READY!', W / 2, 62, { size: 22 * pulse + 4, color: '#1f2430', align: 'center', weight: 800 });
-    text('hold your hand under the outlet ✋', W / 2, 92, { size: 12, color: '#1f2430', align: 'center', weight: 600 });
+    text('TREAT READY!', W / 2, 105, { size: 26 * pulse + 4, color: '#1f2430', align: 'center', weight: 800 });
+    text('hold your hand under the chute ✋', W / 2, 140, { size: 13, color: '#1f2430', align: 'center', weight: 600 });
   }
 
   function drawSleep(now) {
     const a = 0.25 + 0.2 * Math.sin(now / 700);
-    text('z Z', W / 2, 70, { size: 30, color: `rgba(140,160,200,${a})`, align: 'center', weight: 800 });
-    text('deep sleep · waiting for presence sensor', W / 2, 110, { size: 10, color: '#5b6680', align: 'center', weight: 500 });
+    text('z Z', W / 2, 110, { size: 40, color: `rgba(140,160,200,${a})`, align: 'center', weight: 800 });
+    text('deep sleep · waiting for the PIR sensor', W / 2, 165, { size: 11, color: '#5b6680', align: 'center', weight: 500 });
   }
 
   return { render, get fps() { return fps; } };

@@ -1,142 +1,151 @@
 // Single source of truth for the hardware: parts, pins and the signal-flow graph.
-// Must match the #defines in firmware/hungry_simon/hungry_simon.ino (checked by tools/check-pins.mjs).
-// Board: LilyGO T-Display ESP32 (ESP32-D0WDQ6, 240x135 ST7789 TFT built in).
+// Matches docs/components.md and the #defines in firmware/hungry_simon/hungry_simon.ino
+// (checked by tools/check-pins.mjs). Board: DOIT ESP32 DevKit V1 (ESP32-WROOM-32).
 
 export const PINS = {
-  KEYS: [13, 15, 17, 2, 12, 25, 36, 37],  // Do..Do'  (36/37 input-only: external 10k pull-ups; 2/12 strapping pins, OK for keys)
-  SPEAKER: 26,     // LEDC PWM → PAM8302 amplifier → 8 Ω speaker
-  LEDS: 27,        // WS2812B data for 9 LEDs: 8 under the keys + the treat light (via 74AHCT125, 3.3 V → 5 V)
-  I2C_SDA: 21,     // I2C bus → TOF400C-VL53L1X
-  I2C_SCL: 22,
-  SERVO: 32,       // SG90 control, 50 Hz PWM
-  PIR: 33,         // HC-SR501 PIR output, RTC pin → wakes from deep sleep (ext0)
-  IR_LEVEL: 39,    // IR obstacle module looking across the reservoir (LOW = treats present)
-  IR_DROP: 38,     // IR obstacle module at the slide (LOW pulse = a treat passed)
-  BATTERY: 34,     // battery voltage divider (on the T-Display board), ADC1
-  BTN_MODE: 0,     // built-in button: next mode
-  BTN_OPTION: 35,  // built-in button: difficulty
-  TFT: { MOSI: 19, SCLK: 18, CS: 5, DC: 16, RST: 23, BL: 4 }, // built in, used by TFT_eSPI
+  KEYS: [13, 14, 27, 32, 33, 15, 2, 12], // Do..Do'  lever microswitches to GND (2, 12, 15 are boot straps: OK for keys)
+  LEDS: 16,        // WS2812 data for 9 sticks × 8 LEDs (via 74AHCT125 + 330 Ω)
+  SERVO: 17,       // MG90S, 50 Hz PWM
+  I2S_BCLK: 26,    // MAX98357A bit clock
+  I2S_LRC: 25,     // MAX98357A word clock
+  I2S_DOUT: 22,    // MAX98357A data
+  I2C_SDA: 21,     // VL53L7CX
+  I2C_SCL: 19,
+  PIR: 36,         // HC-SR501, RTC pin → deep-sleep wake (ext0)
+  IR_LEVEL: 39,    // IR module across the reservoir
+  IR_DROP: 35,     // IR module at the chute (interrupt)
+  BATTERY: 34,     // 2S pack via 100k/33k divider, ADC1
+  BTN_MODE: 0,     // BOOT button on the DevKit
+  TFT: { SCK: 18, MOSI: 23, CS: 5, DC: 4 }, // ILI9341 (RST → EN, backlight → 3.3 V)
 };
 
 /** Parts of the device. `fn` = firmware trace id to jump to in the code viewer. */
 export const PARTS = [
   {
-    id: 'esp32', name: 'ESP32 (LilyGO T-Display)', model: 'ESP32-D0WDQ6, 4 MB flash',
+    id: 'esp32', name: 'ESP32 DevKit V1', model: 'DOIT ESP32 DevKit V1 (ESP32-WROOM-32, 4 MB flash, Wi-Fi + Bluetooth)',
     pins: 'all', fn: 'loop',
-    what: 'The brain. A dual-core 240 MHz microcontroller with Wi-Fi and Bluetooth. It runs the firmware: it reads every sensor, runs the game, drives the outputs and talks to the cloud.',
-    how: 'After power-on, setup() runs once and starts every part. Then loop() runs again and again, thousands of times a second. Each pass scans the keys, polls the sensors, advances the game timers, refreshes the LEDs and screen and services MQTT. Nothing in loop() waits with delay(), so the device never misses a key press.',
-    specs: ['240 MHz Xtensa LX6, 2 cores', '520 KB SRAM, 4 MB flash', 'Wi-Fi 802.11 b/g/n', 'Deep sleep ≈ 10 µA (chip only)', '3.3 V logic'],
+    what: 'The brain. A dual-core 240 MHz microcontroller with Wi-Fi. It runs the games, keeps the sound clips in its flash memory and talks to the cloud.',
+    how: 'After power-on, setup() runs once and starts every part. Then loop() runs again and again on core 1: it scans the keys, polls the sensors, moves the game forward and services MQTT, without ever waiting. Two background tasks run on core 0: one streams audio to the amplifier, the other redraws the screen. That way a slow job never delays a key press.',
+    specs: ['2 × 240 MHz Xtensa LX6 cores', '520 KB RAM, 4 MB flash (≈1.3 MB for sound clips)', 'Wi-Fi 802.11 b/g/n', 'Powered with 5 V on VIN; 3.3 V logic', 'All 24 usable GPIOs are assigned'],
   },
   {
-    id: 'keys', name: '8 piano keys', model: 'Tactile switches under 3D-printed keycaps with springs',
+    id: 'keys', name: '8 piano keys', model: 'Hinged keys on KW11-3Z lever microswitches (8 + 2 spare)',
     pins: PINS.KEYS, fn: 'keys.read',
-    what: 'Eight spring-loaded keys, Do to high Do. Each one closes a switch.',
-    how: 'Each key connects its GPIO to GND when pressed. A pull-up resistor keeps the pin HIGH otherwise, so pressed = LOW. Metal contacts bounce for a few milliseconds, so the firmware only accepts a new state after it has stayed the same for 15 ms (debouncing). The time of each press is stored with millis() so the game can measure your timing against the beat.',
-    specs: ['Active LOW, INPUT_PULLUP', 'GPIO 36/37 have no internal pull-up: 10 kΩ external', 'Debounce 15 ms', 'Timing resolution 1 ms'],
+    what: 'Eight hinged keys, Do to high Do. Pressing a key pushes the lever of a microswitch underneath.',
+    how: 'Each microswitch connects its GPIO to GND when pressed (COM to GND, NO to the pin). The internal pull-up keeps the pin HIGH otherwise, so pressed = LOW. The metal contacts bounce for a few milliseconds, so the firmware only accepts a new state after it has stayed the same for 15 ms (debouncing). The time of each press is stored with millis() so the game can measure your timing against the beat.',
+    specs: ['Active LOW, INPUT_PULLUP', 'Debounce 15 ms', 'Timing resolution 1 ms', 'GPIO 2, 12, 15 are boot pins: no external pull-ups'],
   },
   {
-    id: 'leds', name: 'RGB LEDs under the keys', model: '8 × WS2812B addressable LEDs',
+    id: 'leds', name: 'Key lighting (LED sticks)', model: '8 × WS2812 5050 RGB stick (8 LEDs each, 5 V)',
     pins: [PINS.LEDS], fn: 'leds.show',
-    what: 'One colour LED under each key. It shows which key to press next and gives feedback. A 9th LED on the same wire is the treat light.',
-    how: 'WS2812B LEDs are daisy-chained. The ESP32 sends 24 bits (green, red, blue) per LED down one data wire with precise timing (800 kHz), and each LED keeps its own colour and passes the rest on. The firmware only sends new data when something changed. A 74AHCT125 converts the 3.3 V data signal to the 5 V the LEDs expect.',
-    specs: ['5 V, up to 60 mA each at full white', '1 data pin for all 9', '24-bit colour', 'Library: Adafruit_NeoPixel'],
+    what: 'A stick of 8 colour LEDs under each key. It shows which key to press next and flashes green or red for feedback.',
+    how: 'WS2812 LEDs are daisy-chained: 9 sticks × 8 = 72 LEDs on ONE data wire. The ESP32 sends 24 colour bits per LED at 800 kHz; each LED keeps its own 24 bits and passes the rest on. The firmware gives all 8 LEDs of a stick the same colour, and only sends new data (~2.2 ms) when something changed. A 74AHCT125 turns the 3.3 V data signal into the 5 V the LEDs expect. Brightness is capped at 50 % so 72 LEDs can never draw more than ~2.2 A.',
+    specs: ['72 LEDs in use (+1 spare stick)', '60 mA per LED at full white', '1 data pin (GPIO 16)', 'Brightness cap 50 %', 'Library: Adafruit_NeoPixel'],
   },
   {
-    id: 'speaker', name: 'Speaker + amplifier', model: 'PAM8302 2.5 W class-D amp + 8 Ω 40 mm speaker',
-    pins: [PINS.SPEAKER], fn: 'sound.on',
-    what: 'Plays a note for every key, plus the success and error sounds. The plywood frame acts as a sound box.',
-    how: 'The ESP32\'s LEDC peripheral generates a square wave at the note\'s frequency (Do = 262 Hz) on GPIO 26. ledcWriteTone() changes the frequency without stopping the CPU. The class-D amplifier boosts that weak signal to drive the speaker cone. The closed plywood box makes the sound louder and warmer.',
-    specs: ['Square wave, 8-bit duty', 'C4 262 Hz … C5 523 Hz', 'Volume = PWM duty cycle', 'Amp shutdown pin can cut idle current'],
+    id: 'treatLight', name: 'Chute light', model: 'WS2812 stick (8 LEDs) at the chute, 9th stick on the chain',
+    pins: [PINS.LEDS], fn: 'light.wait',
+    what: 'Tells you a treat is waiting: it pulses orange until a hand or paw is under the chute, then turns green while the treat drops.',
+    how: 'It is simply the 9th stick at the end of the LED chain, so it needs no extra GPIO. Its colour is computed every loop(): a slow sine wave on the brightness makes it "breathe".',
+    specs: ['LEDs 64–71 of the chain', 'Pulse ≈ 1.6 s'],
   },
   {
-    id: 'display', name: 'Display', model: '1.14" ST7789 TFT, 240 × 135 (built into the T-Display)',
+    id: 'display', name: 'Display', model: '2.8" ILI9341 TFT, 320 × 240, SPI',
     pins: Object.values(PINS.TFT), fn: 'display.note',
-    what: 'Shows the falling notes, Simon\'s status, the score and the treat counter.',
-    how: 'The screen is driven over SPI at 40 MHz. To avoid flicker the firmware draws each frame into an off-screen sprite (a frame buffer in RAM) and pushes it to the screen in one go, every 40 ms (25 Hz, above the 20 Hz the brief requires). A note\'s y position is computed from how many milliseconds remain before it should be played.',
-    specs: ['240 × 135 px, 16-bit colour', 'SPI 40 MHz', 'Refresh 25 Hz', 'Library: TFT_eSPI (sprite)'],
+    what: 'Shows the falling notes, Simon\'s status, menus, the score and the treat counter.',
+    how: 'The screen is driven over SPI at 40 MHz. Each frame is drawn into a sprite (a frame buffer in RAM, 8-bit colour = 77 KB) and then sent in one go, so it never flickers. Sending a full frame takes about 31 ms, which is why the display has its own task on core 0. A note\'s height = how many milliseconds are left before it must be played.',
+    specs: ['320 × 240, 2.8"', 'SPI 40 MHz', '25 frames per second', 'Library: TFT_eSPI (User_Setup_HungrySimon.h)'],
   },
   {
-    id: 'pir', name: 'Presence sensor', model: 'HC-SR501 PIR motion sensor',
+    id: 'amp', name: 'Audio amplifier', model: 'MAX98357A I2S class-D amplifier, 3 W',
+    pins: [PINS.I2S_BCLK, PINS.I2S_LRC, PINS.I2S_DOUT], fn: 'sound.on',
+    what: 'Turns the digital sound from the ESP32 into enough power for the speaker. It plays recorded clips with about 10–20 ms delay.',
+    how: 'I2S is a 3-wire digital audio bus: a bit clock (BCLK), a word clock that marks each sample (LRC) and the data (DIN). The ESP32 streams 16 000 samples per second, 16 bits each. The MAX98357A has its own DAC and class-D amplifier: it switches the speaker on and off very fast, and the speaker smooths that into sound. That wastes very little energy. The clips are WAV files stored in the ESP32\'s flash (LittleFS).',
+    specs: ['3.2 W into 4 Ω at 5 V', 'I2S, 16 kHz / 16-bit mono', 'Gain 9 dB (GAIN pin open)', 'Library: ESP_I2S (in the ESP32 core)'],
+  },
+  {
+    id: 'speaker', name: 'Speaker', model: '4 Ω, 3 W, 40 mm full-range',
+    pins: 'via amp', fn: 'sound.on',
+    what: 'Makes the sound. The plywood frame acts as the speaker box.',
+    how: 'A coil on the speaker cone sits in a magnet\'s field. The amplifier\'s current through the coil pushes the cone back and forth, which moves air: sound. A closed box stops the front and back waves from cancelling each other, so the bass gets louder. A passive radiator salvaged from a Bluetooth speaker can add even more bass.',
+    specs: ['4 Ω, 3 W', '40 mm', 'Driven by the MAX98357A'],
+  },
+  {
+    id: 'servo', name: 'Treat motor', model: 'MG90S metal-gear micro servo + treat wheel',
+    pins: [PINS.SERVO], fn: 'servo.dispense',
+    what: 'Turns the treat wheel one slot per win, dropping one treat into the chute.',
+    how: 'A servo turns to the angle encoded in a 50 Hz pulse: about 0.5 ms = 0° and 2.4 ms = 180°. To dispense, the firmware moves the wheel 90° and back, which pushes exactly one slot\'s treat out. Metal gears survive a jammed treat better than plastic ones. It gets 5 V straight from the buck converter, with a 470 µF capacitor, because starting up it can draw ~0.8 A.',
+    specs: ['4.8–6 V, stall ≈ 0.8 A', '50 Hz PWM, 0.5–2.4 ms', 'Metal gears', 'Library: ESP32Servo'],
+  },
+  {
+    id: 'tof', name: 'Hand / paw sensor', model: 'VL53L7CX 8×8 multizone time-of-flight sensor (I2C)',
+    pins: [PINS.I2C_SDA, PINS.I2C_SCL], fn: 'tof.read',
+    what: 'Looks down from the chute. When a hand or a paw is under it, the waiting treat drops.',
+    how: 'The VL53L7CX fires invisible 940 nm laser light and times how long it takes to bounce back (time of flight), separately for 8 × 8 = 64 zones in a 60° × 60° view. At start-up it uploads its own ranging firmware (~84 KB, 1–2 s) and the ESP32 learns the distance of every zone to the empty bowl. A hand counts when at least 4 of the 16 centre zones are 5 cm closer, two frames in a row, so a single falling treat never triggers it.',
+    specs: ['64 zones, 60° × 60°', 'Up to 3.5 m', '15 frames per second', 'I2C 400 kHz, address 0x29', 'Library: STM32duino VL53L7CX'],
+  },
+  {
+    id: 'pir', name: 'Presence sensor', model: 'HC-SR501 PIR (not on the component list yet: required by the brief)',
     pins: [PINS.PIR], fn: 'sensors.presence',
     what: 'Notices when someone (or a pet) is in front of the instrument, and wakes it from deep sleep.',
-    how: 'A pyroelectric sensor behind a Fresnel lens notices changes in infrared heat as a warm body moves. Its output goes HIGH for a few seconds. GPIO 33 is an RTC pin, so even in deep sleep, when the CPU is off, the ESP32 can be woken by this pin going HIGH (ext0 wake-up). A PIR was chosen over an ultrasonic HC-SR04 because it uses about 50 µA and needs no CPU to trigger, which ultrasonic ranging does.',
-    specs: ['≈ 50 µA idle', 'Range up to 7 m, 110° cone', 'Digital HIGH on motion', 'Wake source: esp_sleep_enable_ext0_wakeup'],
+    how: 'A pyroelectric sensor behind a Fresnel lens notices changes in infrared heat as a warm body moves. Its output goes HIGH for a few seconds. GPIO 36 is an RTC pin, so even in deep sleep, with the CPU off, the ESP32 is woken when it goes HIGH (ext0 wake-up).',
+    specs: ['≈ 50 µA', 'Range up to 7 m, 110°', 'Digital HIGH on motion'],
   },
   {
-    id: 'servo', name: 'Treat dispenser servo', model: 'SG90 micro servo + 3D-printed paddle wheel',
-    pins: [PINS.SERVO], fn: 'servo.dispense',
-    what: 'Turns a paddle wheel under the treat reservoir, which drops one treat onto the slide.',
-    how: 'A servo turns to the angle encoded in a 50 Hz pulse: about 0.5 ms = 0° and 2.4 ms = 180°. To dispense, the firmware moves the wheel 90° and back, which pushes exactly one compartment\'s treat out. The servo sits inside a closed housing so fingers and paws can\'t reach it.',
-    specs: ['4.8–6 V, stall ≈ 650 mA', '50 Hz PWM, 0.5–2.4 ms', '≈ 0.1 s / 60°', 'Library: ESP32Servo'],
-  },
-  {
-    id: 'tof', name: 'Hand sensor (time of flight)', model: 'TOF400C-VL53L1X module (ST VL53L1X, I2C)',
-    pins: [PINS.I2C_SDA, PINS.I2C_SCL], fn: 'tof.read',
-    what: 'Looks down from the treat outlet. When you hold your hand under it, the waiting treat drops into your hand.',
-    how: 'The VL53L1X fires invisible 940 nm laser pulses and times how long the light takes to bounce back. Light travels about 30 cm per nanosecond, so the chip measures picosecond delays to get millimetres. It talks to the ESP32 over I2C (two wires, SDA and SCL, address 0x29). At start-up the firmware measures the distance to the empty bowl. Two readings in a row that are at least 5 cm closer mean a hand.',
-    specs: ['Range up to 4 m (Short mode ≈ 1.3 m)', '27° field of view', '20 measurements per second (33 ms budget)', 'I2C address 0x29, 400 kHz', '3.3–5 V, ≈ 20 mA while ranging', 'Library: VL53L1X by Pololu'],
-  },
-  {
-    id: 'treatLight', name: 'Treat light', model: 'WS2812B LED at the outlet (9th LED on the chain)',
-    pins: [PINS.LEDS], fn: 'light.wait',
-    what: 'Tells you a treat is waiting: it pulses orange until you hold your hand under the outlet, then turns green while the treat drops.',
-    how: 'It is simply one more WS2812B LED at the end of the key-LED chain: the data wire continues from the last key LED to this one. So it needs no extra GPIO. The firmware computes its colour every loop(): a slow sine wave on the brightness makes it "breathe".',
-    specs: ['Same data wire as the key LEDs (GPIO 27)', 'Index 8 in the chain', 'Pulse ≈ 1.6 s'],
-  },
-  {
-    id: 'irLevel', name: 'Treat level sensor', model: 'IR obstacle module (TCRT5000-style) across the reservoir',
+    id: 'irLevel', name: 'Treat level sensor', model: 'IR obstacle module (not on the component list yet: required by the brief)',
     pins: [PINS.IR_LEVEL], fn: 'sensors.level',
-    what: 'Detects when the reservoir is almost empty so the web app can send a "refill" alert.',
-    how: 'An IR LED shines across the reservoir at the low-level mark and a photodiode measures the reflection. A comparator on the module turns it into a digital signal: LOW = something (treats) is there, HIGH = nothing, so the level is low.',
-    specs: ['Digital output, adjustable threshold', '2–30 mm range', 'Input-only GPIO 39'],
+    what: 'Detects when the reservoir is almost empty, so the web app can send a "refill" alert.',
+    how: 'An IR LED shines across the reservoir at the low mark and a photodiode measures the reflection. A comparator on the module turns that into a digital signal: LOW = treats there, HIGH = level low.',
+    specs: ['Digital output', 'Input-only GPIO 39'],
   },
   {
-    id: 'irDrop', name: 'Treat drop sensor', model: 'IR obstacle module at the slide',
+    id: 'irDrop', name: 'Treat drop sensor', model: 'IR obstacle module at the chute (not on the component list yet)',
     pins: [PINS.IR_DROP], fn: 'sensors.drop',
-    what: 'Confirms a treat really fell, so a jam is noticed and reported.',
-    how: 'Same kind of IR module, aimed across the slide. When a treat passes, the output goes LOW for a few milliseconds. The firmware waits up to 1.5 s after turning the wheel for that pulse. No pulse means the dispenser is jammed or empty.',
-    specs: ['Digital, active LOW', 'Input-only GPIO 38'],
+    what: 'Confirms a treat really fell, so a jam or an empty reservoir is noticed.',
+    how: 'The same kind of IR module, aimed across the chute. A passing treat makes the output go LOW for a few milliseconds, too short to poll, so an interrupt catches it. No pulse within 1.5 s means a jam or an empty reservoir.',
+    specs: ['Digital, active LOW', 'Interrupt on GPIO 35'],
   },
   {
-    id: 'battery', name: 'Battery + charging', model: '1S Li-ion 2000 mAh (protected) + TP4056 USB-C charger',
+    id: 'power', name: 'Power', model: '2 × 18650 (2S, protected, e.g. Samsung 30Q) + USB-C 2S charger/BMS + 5 V 5 A buck + switch',
     pins: [PINS.BATTERY], fn: 'sensors.battery',
-    what: 'Powers everything without a cable, and charges over USB-C.',
-    how: 'A protected cell (with a built-in BMS against over-charge, over-discharge and short circuit) feeds the board. A boost converter makes 5 V for the LEDs, servo and amplifier, and the T-Display regulates 3.3 V for the ESP32. The ESP32 reads the battery voltage through a divider on GPIO 34. In deep sleep the whole device draws well under 1 mA, so it can wait for days.',
-    specs: ['3.7 V nominal, 4.2 V full', 'USB-C 5 V charging, 1 A', 'Low-battery warning < 3.4 V'],
+    what: 'Runs everything from two Li-ion cells, about 4 hours of play, and charges over USB-C.',
+    how: 'Two cells in series make 7.4 V (8.4 V full, ~6 V empty). The charger board raises USB-C 5 V to charge them and its BMS protects against over-charge, over-discharge and short circuits. A buck converter steps 7.4 V down to a steady 5 V (up to 5 A) for the LEDs, servo, amplifier and the DevKit\'s VIN. The ESP32 measures the pack through a 100k/33k divider: 8.4 V becomes 2.08 V, safe for the ADC.',
+    specs: ['2S, 7.4 V, ≈ 22 Wh', 'Peak ≈ 4.1 A at 5 V (LEDs capped at 50 %)', 'Typical ≈ 0.9 A → ≈ 4 h', 'Low warning < 6.8 V'],
   },
   {
-    id: 'buttons', name: 'Mode & option buttons', model: '2 built-in T-Display buttons',
-    pins: [PINS.BTN_MODE, PINS.BTN_OPTION], fn: 'buttons.mode',
-    what: 'Pick the game mode and difficulty on the device itself.',
-    how: 'Same as the keys: pressed = LOW, debounced in firmware. GPIO 0 is also the boot-mode pin, so it is only read after startup.',
-    specs: ['GPIO 0: mode', 'GPIO 35: difficulty'],
+    id: 'buttons', name: 'BOOT button', model: 'The BOOT button on the DevKit V1',
+    pins: [PINS.BTN_MODE], fn: 'buttons.mode',
+    what: 'Short press: next game mode. Long press (0.8 s): next difficulty.',
+    how: 'Like the keys: pressed = LOW, debounced in firmware. The firmware times how long it was held. GPIO 0 is also the "enter flash mode" pin, which is why it is only read after start-up.',
+    specs: ['GPIO 0', 'Long press ≥ 800 ms'],
   },
   {
     id: 'wifi', name: 'Wi-Fi + MQTT over TLS', model: 'ESP32 radio, PubSubClient + WiFiClientSecure',
     pins: 'radio', fn: 'cloud.publish',
     what: 'Sends scores, stats and alerts to the cloud, and receives settings and remote commands from the web app.',
-    how: 'The ESP32 joins Wi-Fi, opens an encrypted TLS connection to the MQTT broker on port 8883 and subscribes to its own command topics. Messages are small JSON texts. Publishing never blocks the game. In deep sleep the radio is off, so the broker keeps commands (persistent session, QoS 1) until the device wakes up.',
+    how: 'The ESP32 joins Wi-Fi, opens an encrypted TLS connection to the MQTT broker on port 8883 and subscribes to its own command topics. Messages are small JSON texts. In deep sleep the radio is off, so the broker keeps commands (persistent session, QoS 1) until the device wakes up.',
     specs: ['MQTT 3.1.1, QoS 0/1', 'TLS 1.2, port 8883', 'Topics: hungrysimon/<id>/…'],
   },
 ];
 
-export const partById = (id) => PARTS.find((p) => p.id === id);
+const ALIASES = { battery: 'power' };
+export const partById = (id) => PARTS.find((p) => p.id === (ALIASES[id] || id));
 
 /** Signal-flow graph drawn by src/visuals/flow.js. */
 export const FLOW = {
   nodes: [
-    { id: 'pir', label: 'PIR sensor', sub: 'GPIO 33', side: 'in' },
-    { id: 'keys', label: '8 keys', sub: 'GPIO 13…37', side: 'in' },
-    { id: 'buttons', label: 'Buttons', sub: 'GPIO 0 · 35', side: 'in' },
+    { id: 'pir', label: 'PIR sensor', sub: 'GPIO 36', side: 'in' },
+    { id: 'keys', label: '8 keys', sub: 'GPIO 13…12', side: 'in' },
+    { id: 'buttons', label: 'BOOT button', sub: 'GPIO 0', side: 'in' },
     { id: 'irLevel', label: 'IR level', sub: 'GPIO 39', side: 'in' },
-    { id: 'irDrop', label: 'IR drop', sub: 'GPIO 38', side: 'in' },
-    { id: 'battery', label: 'Battery', sub: 'GPIO 34 (ADC)', side: 'in' },
-    { id: 'tof', label: 'ToF sensor (I2C)', sub: 'GPIO 21 · 22', side: 'in' },
+    { id: 'irDrop', label: 'IR drop', sub: 'GPIO 35', side: 'in' },
+    { id: 'battery', label: '2S battery', sub: 'GPIO 34 (ADC)', side: 'in' },
+    { id: 'tof', label: 'VL53L7CX (I2C)', sub: 'GPIO 21 · 19', side: 'in' },
     { id: 'esp32', label: 'ESP32', sub: 'setup() · loop()', side: 'core' },
-    { id: 'leds', label: 'RGB LEDs ×9', sub: 'GPIO 27', side: 'out' },
-    { id: 'speaker', label: 'Speaker', sub: 'GPIO 26 (PWM)', side: 'out' },
-    { id: 'display', label: 'Display', sub: 'SPI', side: 'out' },
-    { id: 'servo', label: 'Servo', sub: 'GPIO 32 (PWM)', side: 'out' },
+    { id: 'leds', label: 'LED sticks ×9', sub: 'GPIO 16', side: 'out' },
+    { id: 'speaker', label: 'Amp + speaker', sub: 'I2S 26·25·22', side: 'out' },
+    { id: 'display', label: 'ILI9341', sub: 'SPI', side: 'out' },
+    { id: 'servo', label: 'MG90S', sub: 'GPIO 17', side: 'out' },
     { id: 'wifi', label: 'MQTT / TLS', sub: 'Wi-Fi', side: 'out' },
     { id: 'webapp', label: 'Web app', sub: 'cloud', side: 'cloud' },
   ],
@@ -162,28 +171,27 @@ export const FLOW = {
 /** GPIO budget: [gpio, signal, part id, direction, peripheral, note] */
 export const PIN_TABLE = [
   [13, 'Key Do', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
-  [15, 'Key Re', 'keys', 'in', 'GPIO', 'strapping pin: fine with a pull-up'],
-  [17, 'Key Mi', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
-  [2, 'Key Fa', 'keys', 'in', 'GPIO', 'strapping pin: key to GND only, no external pull-up'],
-  [12, 'Key Sol', 'keys', 'in', 'GPIO', 'strapping pin: key to GND only, no external pull-up'],
-  [25, 'Key La', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
-  [36, 'Key Si', 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
-  [37, "Key Do'", 'keys', 'in', 'GPIO', 'input-only, external 10 kΩ pull-up'],
-  [26, 'Speaker', 'speaker', 'out', 'LEDC PWM', 'square wave to the PAM8302 amp'],
-  [27, 'LED data', 'leds', 'out', 'RMT / bit-bang', '9 × WS2812B (8 keys + treat light) via a 74AHCT125'],
-  [21, 'I2C SDA', 'tof', 'in/out', 'I2C', 'TOF400C-VL53L1X (module has its own pull-ups)'],
-  [22, 'I2C SCL', 'tof', 'out', 'I2C', 'TOF400C-VL53L1X, 400 kHz'],
-  [32, 'Servo', 'servo', 'out', 'LEDC PWM 50 Hz', 'SG90 on 5 V, shared GND'],
-  [33, 'PIR', 'pir', 'in', 'GPIO + RTC', 'ext0 deep-sleep wake-up'],
-  [39, 'IR level', 'irLevel', 'in', 'GPIO', 'input-only; module drives the line'],
-  [38, 'IR drop', 'irDrop', 'in', 'GPIO interrupt', 'input-only; FALLING edge'],
-  [34, 'Battery', 'battery', 'in', 'ADC1', 'on-board divider ×2'],
-  [0, 'MODE button', 'buttons', 'in', 'GPIO', 'boot pin: read only after start-up'],
-  [35, 'OPTION button', 'buttons', 'in', 'GPIO', 'on-board button'],
-  [19, 'TFT MOSI', 'display', 'out', 'SPI', 'built in'],
-  [18, 'TFT SCLK', 'display', 'out', 'SPI', 'built in'],
-  [5, 'TFT CS', 'display', 'out', 'SPI', 'built in'],
-  [16, 'TFT DC', 'display', 'out', 'GPIO', 'built in'],
-  [23, 'TFT RST', 'display', 'out', 'GPIO', 'built in'],
-  [4, 'TFT backlight', 'display', 'out', 'GPIO', 'built in'],
+  [14, 'Key Re', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [27, 'Key Mi', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [32, 'Key Fa', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [33, 'Key Sol', 'keys', 'in', 'GPIO', 'INPUT_PULLUP'],
+  [15, 'Key La', 'keys', 'in', 'GPIO', 'boot strap: key to GND only'],
+  [2, 'Key Si', 'keys', 'in', 'GPIO', 'boot strap: key to GND only'],
+  [12, "Key Do'", 'keys', 'in', 'GPIO', 'boot strap: key to GND only, never a pull-up'],
+  [16, 'LED data', 'leds', 'out', 'RMT', '72 WS2812 via 74AHCT125 + 330 Ω'],
+  [17, 'Servo', 'servo', 'out', 'LEDC PWM 50 Hz', 'MG90S on the 5 V rail'],
+  [26, 'I2S BCLK', 'amp', 'out', 'I2S', 'MAX98357A'],
+  [25, 'I2S LRC', 'amp', 'out', 'I2S', 'MAX98357A word clock'],
+  [22, 'I2S DIN', 'amp', 'out', 'I2S', 'MAX98357A data'],
+  [21, 'I2C SDA', 'tof', 'in/out', 'I2C', 'VL53L7CX'],
+  [19, 'I2C SCL', 'tof', 'out', 'I2C', 'VL53L7CX, 400 kHz'],
+  [18, 'TFT SCK', 'display', 'out', 'SPI', 'ILI9341'],
+  [23, 'TFT MOSI', 'display', 'out', 'SPI', 'ILI9341'],
+  [5, 'TFT CS', 'display', 'out', 'SPI', 'boot strap: idles HIGH, fine'],
+  [4, 'TFT DC', 'display', 'out', 'GPIO', 'ILI9341 data/command'],
+  [36, 'PIR', 'pir', 'in', 'GPIO + RTC', 'input-only; ext0 deep-sleep wake'],
+  [39, 'IR level', 'irLevel', 'in', 'GPIO', 'input-only'],
+  [35, 'IR drop', 'irDrop', 'in', 'GPIO interrupt', 'input-only; FALLING edge'],
+  [34, 'Battery', 'power', 'in', 'ADC1', '100k/33k divider: 8.4 V → 2.08 V'],
+  [0, 'BOOT button', 'buttons', 'in', 'GPIO', 'on the DevKit; short = mode, long = difficulty'],
 ];

@@ -2,7 +2,7 @@
 // Lines in the firmware end with `//@trace.id`; those markers are hidden here.
 
 export const FIRMWARE_DIR = 'firmware/hungry_simon/';
-export const FIRMWARE_FILES = ['hungry_simon.ino', 'keys.ino', 'game.ino', 'outputs.ino', 'sensors.ino', 'display.ino', 'cloud.ino'];
+export const FIRMWARE_FILES = ['hungry_simon.ino', 'keys.ino', 'game.ino', 'audio.ino', 'outputs.ino', 'sensors.ino', 'display.ino', 'cloud.ino'];
 
 const MARKER = /\s*\/\/@([\w.-]+)\s*$/;
 const KEYWORDS = /\b(void|bool|int|int8_t|int16_t|int32_t|uint8_t|uint16_t|uint32_t|float|char|byte|const|static|struct|enum|return|if|else|for|while|switch|case|break|default|continue|true|false|nullptr|volatile|unsigned|sizeof|auto)\b/g;

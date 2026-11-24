@@ -18,7 +18,7 @@ export function createPartsPanel(el, { onSelect, onShowCode }) {
     const p = partById(id);
     el.querySelectorAll('.part-chips button').forEach((b) => b.classList.toggle('on', b.dataset.part === id));
     if (!p) return;
-    const pins = Array.isArray(p.pins) ? p.pins.map((n) => `GPIO ${n}`).join(' · ') : p.pins === 'radio' ? 'built-in radio' : 'all pins';
+    const pins = Array.isArray(p.pins) ? p.pins.map((n) => `GPIO ${n}`).join(' · ') : p.pins === 'radio' ? 'built-in radio' : p.pins === 'via amp' ? 'the MAX98357A output' : 'all pins';
     card.innerHTML = `
       <h3>${esc(p.name)}</h3>
       <p class="part-model">${esc(p.model)}</p>
@@ -35,12 +35,12 @@ export function createPartsPanel(el, { onSelect, onShowCode }) {
 
 export function createPinoutPanel(el, { onSelect }) {
   el.innerHTML = `
-    <p class="muted small">GPIO budget of the LilyGO T-Display ESP32: all 16 header GPIOs plus the built-in display, buttons and battery pins are used. Click a row to see that part.</p>
+    <p class="muted small">GPIO budget of the DOIT ESP32 DevKit V1: all 24 usable GPIOs are assigned (GPIO 1/3 are the USB serial port). Click a row to see that part.</p>
     <table class="pins"><thead><tr><th>GPIO</th><th>Signal</th><th>Dir</th><th>Peripheral</th><th>Note</th></tr></thead>
     <tbody>${PIN_TABLE.map(([g, sig, part, dir, per, note]) =>
       `<tr data-part="${part}"><td><b>${g}</b></td><td>${esc(sig)}</td><td><span class="dir ${dir}">${dir}</span></td><td>${esc(per)}</td><td>${esc(note)}</td></tr>`).join('')}
     </tbody></table>
-    <p class="muted small">Never used: GPIO 6–11 (flash). GPIO 2 and 12 are boot straps, so they only get keys that pull to GND, never a pull-up. Analog only on ADC1 (Wi-Fi uses ADC2).</p>`;
+    <p class="muted small">Never used: GPIO 6–11 (flash) and 1/3 (USB serial). GPIO 2, 12 and 15 are boot straps, so they only get keys that pull to GND, never a pull-up. Analog only on ADC1 (Wi-Fi uses ADC2). Full list: docs/components.md.</p>`;
   el.querySelector('tbody').addEventListener('click', (e) => {
     const id = e.target.closest('tr')?.dataset.part;
     if (id) onSelect(id);
