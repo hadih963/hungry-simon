@@ -1,123 +1,31 @@
 const PALETTE = ['#ff4d4d', '#ff9f1c', '#ffd60a', '#3ddc84', '#2ec4b6', '#3a86ff', '#8338ec', '#ff5fa2'];
-
-export function createDevice(root, { keyCount = 8, keyNames = [], keyColors = [] } = {}) {
-  const count = Math.max(1, Math.min(8, keyCount));
-  root.innerHTML = '';
-  root.classList.add('hungry-simon');
-  root.setAttribute('aria-label', 'Hungry Simon rhythm instrument');
-  root.innerHTML = `
-    <div class="hs-stage">
-      <svg class="hs-art" viewBox="0 0 1000 625" role="img" aria-label="Illustrated plywood rhythm instrument with treat dispenser">
-        <defs>
-          <linearGradient id="birch" x2="0" y2="1"><stop stop-color="#f9dda9"/><stop offset=".55" stop-color="#e9bd7e"/><stop offset="1" stop-color="#dba96c"/></linearGradient>
-          <linearGradient id="edge" x2="0" y2="1"><stop stop-color="#c58e54"/><stop offset="1" stop-color="#9d693c"/></linearGradient>
-          <linearGradient id="screen" x2="0" y2="1"><stop stop-color="#202b3c"/><stop offset="1" stop-color="#101723"/></linearGradient>
-          <pattern id="grain" width="150" height="34" patternUnits="userSpaceOnUse"><path d="M0 8 Q38 2 80 9 T150 7 M-20 24 Q30 18 70 25 T160 22" fill="none" stroke="#b77f48" stroke-opacity=".18" stroke-width="2"/></pattern>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#514331" flood-opacity=".22"/></filter>
-        </defs>
-        <ellipse cx="500" cy="570" rx="390" ry="25" fill="#715d46" opacity=".12"/>
-        <g filter="url(#shadow)">
-          <path d="M118 102 Q118 82 140 82 H814 L842 105 V506 Q842 526 820 526 H137 Q118 526 118 506Z" fill="url(#edge)" stroke="#1f2430" stroke-width="5"/>
-          <path d="M132 87 H811 L829 105 V493 Q829 511 810 511 H145 Q132 511 132 493Z" fill="url(#birch)" stroke="#1f2430" stroke-width="4"/>
-          <path d="M132 87 H811 L829 105 V493 Q829 511 810 511 H145 Q132 511 132 493Z" fill="url(#grain)"/>
-          <!-- finger joints and engraved fasteners -->
-          <g fill="#c58d53" stroke="#1f2430" stroke-width="2"><path d="M132 95h15v18h-15m682-18h15v18h-15M132 475h15v18h-15m682 0h15v18h-15"/></g>
-          <g fill="#7f5738" stroke="#1f2430" stroke-width="1.5"><circle cx="158" cy="112" r="4"/><circle cx="802" cy="112" r="4"/><circle cx="158" cy="486" r="4"/><circle cx="802" cy="486" r="4"/></g>
-          <path d="M210 188 Q210 174 225 174 H713 Q728 174 728 189 V300 H210Z" fill="#343a43" stroke="#1f2430" stroke-width="5"/>
-          <path d="M225 188 Q225 186 230 186 H708 Q713 186 713 191 V285 H225Z" fill="url(#screen)" stroke="#111722" stroke-width="3"/>
-          <text x="469" y="165" text-anchor="middle" font-family="system-ui" font-size="15" font-weight="800" letter-spacing="3" fill="#715233">HUNGRY SIMON · PLAY &amp; LEARN</text>
-          <!-- sensor module -->
-          <g class="hs-sensor-art"><rect x="400" y="103" width="143" height="39" rx="10" fill="#344052" stroke="#1f2430" stroke-width="3"/><circle cx="430" cy="122" r="11" fill="#b7c4cf" stroke="#1f2430" stroke-width="3"/><circle cx="513" cy="122" r="11" fill="#b7c4cf" stroke="#1f2430" stroke-width="3"/><circle cx="430" cy="122" r="5" fill="#263343"/><circle cx="513" cy="122" r="5" fill="#263343"/></g>
-          <!-- keys platform and speaker -->
-          <path d="M170 328 Q170 315 184 315 H750 Q764 315 764 329 V446 H170Z" fill="#d7a96e" stroke="#1f2430" stroke-width="3"/>
-          <g class="hs-grille" fill="#554531">${Array.from({length: 6}, (_,r)=>Array.from({length:8},(_,c)=>`<circle cx="${689+c*9+(r%2)*4}" cy="${349+r*10}" r="2.5"/>`).join('')).join('')}</g>
-          <text x="722" y="421" text-anchor="middle" font-family="system-ui" font-size="10" font-weight="700" fill="#684d30">SPEAKER</text>
-          <!-- status and power details -->
-          <circle class="hs-power-dot" cx="190" cy="476" r="5" fill="#49d99a" stroke="#1f2430" stroke-width="2"/><text x="204" y="480" font-family="system-ui" font-size="10" fill="#654b32">POWER</text>
-          <rect x="302" y="465" width="45" height="14" rx="7" fill="#303744" stroke="#1f2430" stroke-width="2"/><path d="M324 468v8" stroke="#e6c48f" stroke-width="2"/>
-          <rect x="365" y="463" width="48" height="18" rx="5" fill="#303744" stroke="#1f2430" stroke-width="2"/><path d="M379 468h20v7h-20z" fill="#8392a3"/><text x="389" y="493" text-anchor="middle" font-family="system-ui" font-size="8" fill="#654b32">USB-C</text>
-        </g>
-        <!-- dispenser assembly -->
-        <g class="hs-dispenser" filter="url(#shadow)">
-          <path d="M843 168h105q14 0 14 14v167H843Z" fill="#e6c993" stroke="#1f2430" stroke-width="4"/>
-          <rect x="856" y="183" width="78" height="112" rx="14" fill="#eff6ed" fill-opacity=".58" stroke="#1f2430" stroke-width="3"/>
-          <path d="M865 202h60v83h-60Z" fill="#efc269" fill-opacity=".35"/>
-          <rect x="850" y="169" width="91" height="20" rx="5" fill="#c68e54" stroke="#1f2430" stroke-width="3"/>
-          <g class="hs-treat-stock"></g>
-          <rect x="845" y="298" width="20" height="8" rx="4" fill="#354253"/><circle cx="851" cy="302" r="2" fill="#e66744"/><circle cx="859" cy="302" r="2" fill="#55c7d4"/>
-          <rect x="867" y="316" width="76" height="61" rx="12" fill="#424955" stroke="#1f2430" stroke-width="4"/><text x="905" y="331" text-anchor="middle" font-family="system-ui" font-size="8" font-weight="800" fill="#f7d79d">SG90 · COVERED</text>
-          <rect x="884" y="337" width="43" height="29" rx="6" fill="#222a35" stroke="#131923" stroke-width="2"/>
-          <g class="hs-wheel"><circle cx="905" cy="351" r="10" fill="#e9b556" stroke="#f2d28e" stroke-width="2"/><path d="M905 341v20M895 351h20M898 344l14 14M912 344l-14 14" stroke="#5c452f" stroke-width="3"/></g>
-          <path d="M853 376h84l25 57h-32l-25-30h-40Z" fill="#bd8950" stroke="#1f2430" stroke-width="4"/>
-          <path d="M878 402l45 30" stroke="#f4d7a7" stroke-width="4" opacity=".8"/>
-          <path d="M893 434q0-19 29-19t29 19v12q0 12-29 12t-29-12Z" fill="#f1d8a7" stroke="#1f2430" stroke-width="3"/><ellipse cx="922" cy="434" rx="29" ry="10" fill="#fff0ce" stroke="#1f2430" stroke-width="3"/><g class="hs-bowl"></g>
-        </g>
-        <g class="hs-sonar" fill="none" stroke="#ff6a1a" stroke-width="3" opacity="0"><path d="M378 116q-17 7-17 15t17 15M556 116q17 7 17 15t-17 15"/><path d="M365 108q-29 23 0 47M569 108q29 23 0 47"/></g>
-        <g class="hs-person" opacity="0"><circle cx="757" cy="108" r="12" fill="#ffcf91" stroke="#1f2430" stroke-width="2"/><path d="M744 123q13-7 26 0l6 33h-38Z" fill="#ff8a4b" stroke="#1f2430" stroke-width="2"/><path d="M746 155l-7 22m26-22 7 22" stroke="#1f2430" stroke-width="5" stroke-linecap="round"/><path d="M742 128l-12 18m39-18 11 17" stroke="#1f2430" stroke-width="4" stroke-linecap="round"/></g>
-      </svg>
-      <div class="hs-screen"><canvas width="480" height="160" aria-label="Game display"></canvas></div>
-      <div class="hs-keys" role="group" aria-label="Musical keys"></div>
-      <button class="hs-presence-hit" type="button" aria-label="Toggle presence sensor"></button>
-      <div class="hs-sleep" aria-hidden="true">zZ</div>
-      <div class="hs-treat-fly" aria-hidden="true">●</div>
-    </div>`;
-  const stage = root.querySelector('.hs-stage');
-  const canvas = root.querySelector('canvas');
-  const keyWrap = root.querySelector('.hs-keys');
-  const keys = [];
-  const ledState = Array.from({ length: count }, () => ({ color: null, intensity: 0 }));
-  const pressed = new Set();
-  let keyInput = () => {}, presenceCb = () => {}, petMode = false, awake = true, volume = 1, treatLevel = 1, dispenseBusy = false;
-  const stock = root.querySelector('.hs-treat-stock');
-  const bowl = root.querySelector('.hs-bowl');
-  const clamp = (v, lo=0, hi=1) => Math.max(lo, Math.min(hi, Number(v) || 0));
-  const stockTreats = () => {
-    stock.innerHTML = '';
-    const n = Math.round(treatLevel * 12);
-    for (let i=0;i<n;i++) {
-      const x=872+(i%4)*14, y=275-Math.floor(i/4)*21;
-      stock.insertAdjacentHTML('beforeend', `<circle cx="${x}" cy="${y}" r="6.5" fill="${['#f4a65a','#f7c66e','#d98b4d'][i%3]}" stroke="#8b5b37" stroke-width="1.5"/>`);
-    }
-  };
-  const bowlTreats = [];
-  const drawBowl = () => { bowl.innerHTML = bowlTreats.slice(-5).map((_,i)=>`<circle cx="${905+i*8}" cy="${439-(i%2)*5}" r="5" fill="#f1ad58" stroke="#8b5b37" stroke-width="1.3" opacity="${i<5?1:.25}"/>`).join(''); };
-  const updateLed = i => {
-    const s=ledState[i], el=keys[i]; if(!el) return;
-    const c=s.color, a=s.intensity;
-    el.style.setProperty('--led-color', c || '#ffbd61');
-    el.style.setProperty('--led-alpha', c ? String(.22 + .78*a) : '.16');
-    el.classList.toggle('lit', !!c && awake);
-    el.classList.toggle('dim', !awake);
-  };
-  for(let i=0;i<count;i++) {
-    const k=document.createElement('button'); k.type='button'; k.className='hs-key';
-    k.dataset.index=String(i); k.style.setProperty('--key-color',keyColors[i]||PALETTE[i]||'#888');
-    k.innerHTML=`<span class="hs-key-led"></span><span class="hs-key-label">${escapeHtml(keyNames[i]||['Do','Re','Mi','Fa','Sol','La','Si',"Do′"][i])}</span>`;
-    k.setAttribute('aria-label', `${keyNames[i]||`Key ${i+1}`}`);
-    const down=e=>{e.preventDefault(); if(!awake||pressed.has(e.pointerId)) return; pressed.add(e.pointerId); k.setPointerCapture?.(e.pointerId); k.classList.add('down'); keyInput(petMode?i-i%2:i,true);};
-    const up=e=>{if(!pressed.has(e.pointerId))return; pressed.delete(e.pointerId); k.classList.remove('down'); keyInput(petMode?i-i%2:i,false);};
-    k.addEventListener('pointerdown',down); k.addEventListener('pointerup',up); k.addEventListener('pointercancel',up);
-    k.addEventListener('lostpointercapture',up); k.addEventListener('pointerleave',e=>{if(pressed.has(e.pointerId))up(e);});
-    keyWrap.append(k); keys.push(k);
-  }
-  const presenceHit=root.querySelector('.hs-presence-hit');
-  presenceHit.addEventListener('click',()=>presenceCb());
-  stockTreats(); drawBowl();
-  return {
-    onKeyInput(cb) { keyInput=typeof cb==='function'?cb:()=>{}; },
-    pressKey(index,isDown) { for(const j of indices(index,petMode,count)) keys[j]?.classList.toggle('down',!!isDown); },
-    setKeyLed(index,color,intensity=1) { for(const j of indices(index,petMode,count)){ledState[j]={color:color||null,intensity:clamp(intensity)};updateLed(j);} },
-    flashAll(color,ms=300) { const old=ledState.map(s=>({...s})); ledState.forEach((s,i)=>{s.color=color||'#fff';s.intensity=1;updateLed(i);}); setTimeout(()=>{ledState.forEach((s,i)=>{ledState[i]=old[i];updateLed(i);});},Math.max(0,ms)); },
-    getDisplayCanvas() { return canvas; },
-    setPresence(isPresent) { root.classList.toggle('present',!!isPresent); },
-    onPresenceToggle(cb) { presenceCb=typeof cb==='function'?cb:()=>{}; },
-    setAwake(isAwake) { awake=!!isAwake; root.classList.toggle('asleep',!awake); keys.forEach((_,i)=>updateLed(i)); if(awake){root.classList.add('waking');setTimeout(()=>root.classList.remove('waking'),650);} },
-    setTreatLevel(level) { treatLevel=clamp(level);stockTreats(); },
-    dispense() { if(dispenseBusy)return Promise.resolve(); dispenseBusy=true; root.classList.add('dispensing'); const fly=root.querySelector('.hs-treat-fly'); fly.classList.remove('drop'); void fly.offsetWidth; fly.classList.add('drop'); return new Promise(resolve=>setTimeout(()=>{root.classList.remove('dispensing');fly.classList.remove('drop');bowlTreats.push(Date.now());drawBowl();dispenseBusy=false;resolve();},1000)); },
-    setPetMode(isPet) { petMode=!!isPet;root.classList.toggle('pet-mode',petMode); },
-    setVolume(v) { volume=clamp(v);root.style.setProperty('--speaker-volume',String(volume)); },
-    pulseSpeaker() { root.classList.remove('speaker-pulse');void stage.offsetWidth;root.classList.add('speaker-pulse');setTimeout(()=>root.classList.remove('speaker-pulse'),450); },
-  };
+const VIEW = { w: 1000, h: 625, screen: { x: 190, y: 175, w: 510, h: 170 }, keys: { x: 158, y: 382, w: 592, h: 112 } };
+const pct = (v, axis) => `${v / VIEW[axis] * 100}%`;
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function createDevice(root,{keyCount=8,keyNames=[],keyColors=[]}={}) {
+ const count=Math.max(1,Math.min(8,keyCount)); root.innerHTML=''; root.classList.add('hungry-simon');
+ root.innerHTML=`<div class="hs-stage"><svg class="hs-art" viewBox="0 0 1000 625" role="img" aria-label="Hungry Simon plywood rhythm instrument and treat dispenser">
+ <defs><linearGradient id="birch" x2="0" y2="1"><stop stop-color="#f9dda9"/><stop offset="1" stop-color="#dba96c"/></linearGradient><linearGradient id="edge" x2="0" y2="1"><stop stop-color="#c58e54"/><stop offset="1" stop-color="#9d693c"/></linearGradient><linearGradient id="screen" x2="0" y2="1"><stop stop-color="#202b3c"/><stop offset="1" stop-color="#101723"/></linearGradient><pattern id="grain" width="150" height="34" patternUnits="userSpaceOnUse"><path d="M0 8Q38 2 80 9T150 7M-20 24Q30 18 70 25T160 22" fill="none" stroke="#b77f48" stroke-opacity=".18" stroke-width="2"/></pattern><filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#514331" flood-opacity=".2"/></filter></defs>
+ <ellipse cx="500" cy="578" rx="390" ry="19" fill="#715d46" opacity=".12"/><g filter="url(#shadow)"><path d="M118 102Q118 82 140 82H814l28 23v401q0 20-22 20H137q-19 0-19-20Z" fill="url(#edge)" stroke="#1f2430" stroke-width="5"/><path d="M132 87H811l18 18v388q0 18-19 18H145q-13 0-13-18Z" fill="url(#birch)" stroke="#1f2430" stroke-width="4"/><path d="M132 87H811l18 18v388q0 18-19 18H145q-13 0-13-18Z" fill="url(#grain)"/>
+ <rect x="180" y="162" width="530" height="197" rx="13" fill="#24303a" stroke="#1f2430" stroke-width="5"/><text x="445" y="153" text-anchor="middle" font-size="14" font-weight="800" letter-spacing="3" fill="#715233">HUNGRY SIMON · PLAY &amp; LEARN</text><rect x="190" y="175" width="510" height="170" rx="4" fill="url(#screen)" stroke="#111722" stroke-width="3"/>
+ <!-- PIR HC-SR501 --> <g class="part-pir"><rect x="397" y="96" width="112" height="53" rx="8" fill="#397346" stroke="#1f2430" stroke-width="3"/><circle cx="453" cy="119" r="23" fill="#f4f0dd" stroke="#1f2430" stroke-width="3"/><path d="M432 119q21-22 42 0-21 22-42 0M438 107q15 12 0 24m30-24q-15 12 0 24" fill="none" stroke="#d6d0bc" stroke-width="2"/><circle cx="410" cy="139" r="3" fill="#d8b74e"/><circle cx="496" cy="139" r="3" fill="#d8b74e"/></g>
+ <g class="part-esp32"><rect x="300" y="366" width="350" height="22" rx="5" fill="#253746" stroke="#1f2430" stroke-width="2"/><text x="475" y="381" text-anchor="middle" font-size="11" font-weight="800" letter-spacing="2" fill="#d8e0dc">T-DISPLAY ESP32</text></g>
+ <path d="M160 397q0-15 15-15h575q15 0 15 15v99H160Z" fill="#d7a96e" stroke="#1f2430" stroke-width="3"/><g class="part-speaker hs-grille" fill="#554531">${Array.from({length:6},(_,r)=>Array.from({length:8},(_,c)=>`<circle cx="682" cy="415" r="2"/>`).join('')).join('')}</g><text x="718" y="477" text-anchor="middle" font-size="9" font-weight="700" fill="#684d30">SPEAKER</text>
+ <circle class="hs-power-dot" cx="190" cy="520" r="5" fill="#49d99a" stroke="#1f2430" stroke-width="2"/><text x="204" y="524" font-size="9" fill="#654b32">POWER</text><rect x="310" y="510" width="38" height="16" rx="5" fill="#303744" stroke="#1f2430" stroke-width="2"/><rect x="365" y="510" width="50" height="16" rx="4" fill="#303744" stroke="#1f2430" stroke-width="2"/><path d="M380 514h20v8h-20Z" fill="#8392a3"/><text x="390" y="539" text-anchor="middle" font-size="8" fill="#654b32">USB-C · BATTERY</text></g>
+ <!-- dispenser --> <g class="hs-dispenser" filter="url(#shadow)"><path d="M843 168h105q14 0 14 14v167H843Z" fill="#e6c993" stroke="#1f2430" stroke-width="4"/><rect x="856" y="183" width="78" height="112" rx="14" fill="#eff6ed" fill-opacity=".58" stroke="#1f2430" stroke-width="3"/><path d="M865 202h60v83h-60Z" fill="#efc269" fill-opacity=".35"/><rect x="850" y="169" width="91" height="20" rx="5" fill="#c68e54" stroke="#1f2430" stroke-width="3"/><g class="hs-treat-stock"></g><g class="part-irLevel"><rect x="846" y="248" width="15" height="8" rx="2" fill="#263d3a" stroke="#1f2430"/><circle cx="850" cy="252" r="2" fill="#ff6a1a"/></g><g class="part-irDrop"><rect x="867" y="374" width="18" height="8" rx="2" fill="#263d3a" stroke="#1f2430"/><circle cx="882" cy="378" r="2" fill="#ff6a1a"/></g><rect x="867" y="316" width="76" height="61" rx="12" fill="#424955" stroke="#1f2430" stroke-width="4"/><text x="905" y="331" text-anchor="middle" font-size="8" font-weight="800" fill="#f7d79d">SG90 · COVERED</text><rect x="884" y="337" width="43" height="29" rx="6" fill="#222a35" stroke="#131923" stroke-width="2"/><g class="hs-wheel"><circle cx="905" cy="351" r="10" fill="#e9b556" stroke="#f2d28e" stroke-width="2"/><path d="M905 341v20m-10-10h20m-17-7 14 14m0-14-14 14" stroke="#5c452f" stroke-width="3"/></g><path d="M853 376h84l25 57h-32l-25-30h-40Z" fill="#bd8950" stroke="#1f2430" stroke-width="4"/><path d="M878 402l45 30" stroke="#f4d7a7" stroke-width="4"/><path d="M893 434q0-19 29-19t29 19v12q0 12-29 12t-29-12Z" fill="#f1d8a7" stroke="#1f2430" stroke-width="3"/><ellipse cx="922" cy="434" rx="29" ry="10" fill="#fff0ce" stroke="#1f2430" stroke-width="3"/><g class="hs-bowl"></g></g>
+ <g class="part-buttons"><rect x="253" y="90" width="24" height="8" rx="4" fill="#343b45" stroke="#1f2430"/><rect x="282" y="90" width="24" height="8" rx="4" fill="#343b45" stroke="#1f2430"/></g><g class="part-wifi" fill="none" stroke="#ff6a1a" stroke-width="2"><path d="M610 105q18-17 36 0M615 111q13-12 26 0M622 117q6-6 12 0"/><circle cx="628" cy="121" r="2" fill="#ff6a1a"/></g>
+ <g class="hs-sonar" fill="none" stroke="#ff6a1a" stroke-width="3" opacity="0"><path d="M387 103q-17 16 0 32m132-32q17 16 0 32M375 95q-29 24 0 48m156-48q29 24 0 48"/></g><g class="hs-person" opacity="0"><circle cx="757" cy="108" r="12" fill="#ffcf91" stroke="#1f2430" stroke-width="2"/><path d="M744 123q13-7 26 0l6 33h-38Z" fill="#ff8a4b" stroke="#1f2430" stroke-width="2"/><path d="m746 155-7 22m26-22 7 22m-30-49-12 18m39-18 11 17" stroke="#1f2430" stroke-width="4" stroke-linecap="round"/></g></svg>
+ <div class="hs-screen"><canvas width="480" height="160" aria-label="Game display"></canvas></div><div class="hs-keys" role="group" aria-label="Musical keys"></div><button class="hs-presence-hit" aria-label="Toggle presence sensor" type="button"></button><span class="hs-sleep" aria-hidden="true">z Z</span><span class="hs-treat-fly" aria-hidden="true">●</span><div class="hs-part-hits"></div></div>`;
+ const stage=root.querySelector('.hs-stage'), canvas=root.querySelector('canvas'), keyWrap=root.querySelector('.hs-keys'), keys=[], states=Array.from({length:count},()=>({color:null,intensity:0})), pressed=new Set();
+ const pos=(el,r)=>{el.style.left=pct(r.x,'w');el.style.top=pct(r.y,'h');el.style.width=pct(r.w,'w');el.style.height=pct(r.h,'h')};
+ pos(root.querySelector('.hs-screen'),VIEW.screen);pos(keyWrap,VIEW.keys);
+ let input=()=>{},presence=()=>{},partCb=()=>{},pet=false,awake=true,level=1,busy=false;const stock=root.querySelector('.hs-treat-stock'),bowl=root.querySelector('.hs-bowl');
+ const update=i=>{const k=keys[i],s=states[i];if(!k)return;k.style.setProperty('--led-color',s.color||'#252a31');k.style.setProperty('--led-strength',String(s.intensity));k.classList.toggle('lit',!!s.color&&awake);k.classList.toggle('dim',!awake)};
+ const stockDraw=()=>{stock.innerHTML='';for(let i=0;i<Math.round(level*12);i++)stock.insertAdjacentHTML('beforeend',`<circle cx="${872+i%4*14}" cy="${275-Math.floor(i/4)*21}" r="6.5" fill="${['#f4a65a','#f7c66e','#d98b4d'][i%3]}" stroke="#8b5b37" stroke-width="1.5"/>`)};let treats=0;
+ for(let i=0;i<count;i++){const k=document.createElement('button');k.type='button';k.className='hs-key';k.dataset.index=i;k.style.setProperty('--key-color',keyColors[i]||PALETTE[i]);k.innerHTML=`<span class="hs-key-led"></span><span class="hs-key-paw" aria-hidden="true">✦</span><span class="hs-key-label">${esc(keyNames[i]||['Do','Re','Mi','Fa','Sol','La','Si',"Do′"][i])}</span>`;k.setAttribute('aria-label',keyNames[i]||`Key ${i+1}`);const down=e=>{e.preventDefault();if(!awake||pressed.has(e.pointerId))return;pressed.add(e.pointerId);k.setPointerCapture?.(e.pointerId);k.classList.add('down');input(pet?i-i%2:i,true)},up=e=>{if(!pressed.has(e.pointerId))return;pressed.delete(e.pointerId);k.classList.remove('down');input(pet?i-i%2:i,false)};k.addEventListener('pointerdown',down);['pointerup','pointercancel','lostpointercapture','pointerleave'].forEach(ev=>k.addEventListener(ev,up));keyWrap.append(k);keys.push(k)}
+ const hitBox=root.querySelector('.hs-part-hits');const parts={esp32:['T-Display ESP32',{x:300,y:366,w:350,h:22}],display:['Display',{x:190,y:175,w:510,h:170}],pir:['PIR sensor',{x:397,y:96,w:112,h:53}],speaker:['Speaker',{x:670,y:400,w:90,h:85}],servo:['Treat servo',{x:867,y:316,w:76,h:61}],irLevel:['IR level sensor',{x:846,y:248,w:20,h:16}],irDrop:['IR drop sensor',{x:867,y:374,w:20,h:16}],battery:['Battery and USB-C',{x:300,y:503,w:120,h:38}],buttons:['Board buttons',{x:250,y:84,w:60,h:20}],wifi:['Wi-Fi antenna',{x:605,y:94,w:47,h:36}],keys:['Keys',{x:400,y:497,w:95,h:17}],leds:['Key LEDs',{x:500,y:497,w:95,h:17}]};
+ for(const [id,[name,r]] of Object.entries(parts)){const b=document.createElement('button');b.type='button';b.className=`hs-part-hit part-${id}`;b.setAttribute('aria-label',name);b.title=name;if(id==='keys'||id==='leds'){b.textContent=name;b.classList.add('hs-label-hit')}b.addEventListener('click',()=>id==='pir'?presence():partCb(id));pos(b,r);hitBox.append(b)}
+ root.querySelector('.hs-presence-hit').addEventListener('click',()=>presence());stockDraw();
+ return {onKeyInput(cb){input=typeof cb==='function'?cb:()=>{}},pressKey(i,d){for(const j of idx(i,pet,count))keys[j]?.classList.toggle('down',!!d)},setKeyLed(i,color,intensity=1){for(const j of idx(i,pet,count)){states[j]={color:color||null,intensity:clamp(intensity)};update(j)}},flashAll(color,ms=300){const old=states.map(x=>({...x}));states.forEach((s,i)=>{states[i]={color:color||'#fff',intensity:1};update(i)});setTimeout(()=>{old.forEach((s,i)=>{states[i]=s;update(i)})},ms)},getDisplayCanvas(){return canvas},setPresence(v){root.classList.toggle('present',!!v)},onPresenceToggle(cb){presence=typeof cb==='function'?cb:()=>{}},setAwake(v){awake=!!v;root.classList.toggle('asleep',!awake);keys.forEach((_,i)=>update(i));if(awake){root.classList.add('waking');setTimeout(()=>root.classList.remove('waking'),750)}},setTreatLevel(v){level=clamp(v);stockDraw()},dispense(){if(busy)return Promise.resolve();busy=true;root.classList.add('dispensing');const f=root.querySelector('.hs-treat-fly');f.classList.remove('drop');void f.offsetWidth;f.classList.add('drop');return new Promise(resolve=>setTimeout(()=>{root.classList.remove('dispensing');f.classList.remove('drop');treats++;bowl.innerHTML=Array.from({length:Math.min(5,treats)},(_,i)=>`<circle cx="${905+i*8}" cy="${439-i%2*5}" r="5" fill="#f1ad58" stroke="#8b5b37"/>`).join('');busy=false;resolve()},1050))},setPetMode(v){pet=!!v;root.classList.toggle('pet-mode',pet)},setVolume(v){root.style.setProperty('--speaker-volume',String(clamp(v)))},pulseSpeaker(){root.classList.remove('speaker-pulse');void stage.offsetWidth;root.classList.add('speaker-pulse');setTimeout(()=>root.classList.remove('speaker-pulse'),450)},onPartClick(cb){partCb=typeof cb==='function'?cb:()=>{}},highlightPart(id){root.querySelectorAll('.hs-part-hit').forEach(e=>e.classList.toggle('highlight',e.classList.contains(`part-${id}`)));root.querySelectorAll('[class*="part-"]').forEach(e=>e.classList.toggle('part-highlight',e.classList.contains(`part-${id}`)))}};
 }
-function indices(i,pet,count){const n=Math.max(0,Math.min(count-1,Math.trunc(i)||0));return pet?[n-n%2,Math.min(count-1,n-n%2+1)]:[n];}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function clamp(v){return Math.max(0,Math.min(1,Number(v)||0))}function idx(i,pet,count){const n=Math.max(0,Math.min(count-1,Math.trunc(i)||0));return pet?[n-n%2,Math.min(count-1,n-n%2+1)]:[n]}
