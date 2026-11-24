@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hungry Simon · ESP32 rhythm instrument simulator</title>
+  <link rel="stylesheet" href="styles/app.css">
+  <link rel="stylesheet" href="styles/device.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">♪</div>
+      <div>
+        <h1>HUNGRY <span>SIMON</span></h1>
+        <p class="tag">PLAY · REPEAT · GET A TREAT</p>
+      </div>
+    </div>
+    <p class="sub">Simulator of an ESP32 rhythm instrument · Project Group 9 · ACS_1C 2026/2027</p>
+  </header>
+
+  <main class="layout">
+    <section class="stage card">
+      <div id="device" class="device-root"></div>
+
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+
+      <div class="controls">
+        <div class="group">
+          <span class="label">Mode (button on device)</span>
+          <div class="seg" id="modes">
+            <button data-mode="free" class="on">Free play</button>
+            <button data-mode="simon">Simon says</button>
+            <button data-mode="song">Song challenge</button>
+            <button data-mode="pet">Pet mode</button>
+          </div>
+        </div>
+        <div class="group">
+          <span class="label">Physical world</span>
+          <div class="row">
+            <button id="presence" class="ghost">🧍 Step in front</button>
+            <button id="refill" class="ghost">🫙 Refill treats</button>
+            <button id="sleep" class="ghost">🌙 Sleep now</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">Keyboard: <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd> <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><kbd>;</kbd> = Do Re Mi Fa Sol La Si Do' · or click / touch the keys</p>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2><span class="dot cloud"></span>Web app · control</h2>
+        <p class="muted small">Settings travel to the device over MQTT (TLS). <span id="broker"></span></p>
+        <div class="form">
+          <label>Player
+            <select id="player">
+              <option>Player 1</option><option>Player 2</option><option>Guest</option><option>Pet</option>
+            </select>
+          </label>
+          <label>Difficulty
+            <select id="difficulty">
+              <option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option>
+            </select>
+          </label>
+          <label>Song
+            <select id="song"></select>
+          </label>
+          <label>Volume <output id="volumeOut">70%</output>
+            <input id="volume" type="range" min="0" max="100" value="70">
+          </label>
+          <label>Daily treat limit
+            <input id="limit" type="number" min="0" max="50" value="5">
+          </label>
+          <button id="remoteDispense" class="primary">Dispense a treat remotely</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="dot stats"></span>Statistics</h2>
+        <div class="stats" id="stats"></div>
+        <table class="best"><thead><tr><th>Best scores</th><th>Simon</th><th>Song</th><th>Pet</th></tr></thead><tbody id="best"></tbody></table>
+      </section>
+
+      <section class="card">
+        <h2><span class="dot mqtt"></span>MQTT traffic <span class="legend">↑ device publishes · ↓ device receives</span></h2>
+        <ul class="mqtt" id="mqtt"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
