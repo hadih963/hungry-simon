@@ -1,22 +1,179 @@
-const NS='http://www.w3.org/2000/svg';
-const palettes={in:'#e5eff8',core:'#263746',out:'#fbe6d2',cloud:'#e1efdf'};
-export function createFlow(root,{nodes,edges}){
- root.innerHTML='';root.classList.add('signal-flow');const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 1120 490');svg.setAttribute('role','img');svg.setAttribute('aria-label','Hungry Simon signal flow schematic');svg.setAttribute('preserveAspectRatio','xMidYMid meet');
- svg.innerHTML=`<defs><filter id="flowGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3 0 6" fill="none" stroke="#69717a" stroke-width="1.5"/></marker></defs><rect class="flow-paper" x="0" y="0" width="1120" height="490" rx="22"/>`;
- const byId=new Map(nodes.map(n=>[n.id,n])), pos={};const inputs=nodes.filter(n=>n.side==='in'),outs=nodes.filter(n=>n.side==='out');inputs.forEach((n,i)=>pos[n.id]={x:28,y:35+i*72,w:178,h:54});outs.forEach((n,i)=>pos[n.id]={x:775,y:45+i*77,w:178,h:54});pos.esp32={x:390,y:135,w:250,h:215};pos.webapp={x:952,y:30,w:148,h:88};
- const route=(e)=>{const a=pos[e.from],b=pos[e.to];if(e.id==='wifi-webapp'||e.id==='webapp-wifi'){const x1=e.from==='wifi'?a.x+a.w:a.x,x2=e.to==='webapp'?b.x:b.x+b.w;const y1=a.y+a.h/2+(e.id==='webapp-wifi'?7:0),y2=b.y+b.h/2+(e.id==='webapp-wifi'?7:0);return `M${x1} ${y1} H${(x1+x2)/2} V${y2} H${x2}`}
- if(e.from==='esp32'){const sy=a.y+a.h/2+(outs.findIndex(n=>n.id===e.to)-2)*21;return `M${a.x+a.w} ${sy} H${b.x-25} V${b.y+b.h/2} H${b.x}`}
- if(e.to==='esp32'){const sy=a.y+a.h/2;const ty=a.y+a.h/2; const ey=b.y+40+(inputs.findIndex(n=>n.id===e.from)-2.5)*23;return `M${a.x+a.w} ${sy} H${b.x-32} V${ey} H${b.x}`}
- return `M${a.x+a.w} ${a.y+a.h/2} H${b.x}`};
- const edgeG=document.createElementNS(NS,'g');edgeG.classList.add('flow-wires');const paths=new Map();
- edges.forEach(e=>{const p=document.createElementNS(NS,'path');p.setAttribute('d',route(e));p.setAttribute('class','flow-wire');p.setAttribute('marker-end','url(#arrow)');p.dataset.edge=e.id;edgeG.append(p);paths.set(e.id,p)});svg.append(edgeG);
- const nodesG=document.createElementNS(NS,'g');nodes.forEach(n=>{const r=pos[n.id],g=document.createElementNS(NS,'g');g.classList.add('flow-node',`side-${n.side}`);g.dataset.id=n.id;g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',`${n.label}, ${n.sub}`);
- if(n.side==='core'){g.innerHTML=`<rect class="chip" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="15"/><text class="chip-title" x="${r.x+r.w/2}" y="${r.y+75}" text-anchor="middle">${n.label}</text><text class="chip-sub" x="${r.x+r.w/2}" y="${r.y+104}" text-anchor="middle">${n.sub}</text><text class="chip-micro" x="${r.x+r.w/2}" y="${r.y+148}" text-anchor="middle">READ  ·  DECIDE  ·  DRIVE</text>`;for(let i=0;i<6;i++){let yy=r.y+25+i*31;g.insertAdjacentHTML('beforeend',`<path class="pin" d="M${r.x-13} ${yy}h13m${r.w} 0h13"/>`)}}
- else if(n.side==='cloud')g.innerHTML=`<path class="cloud-shape" d="M${r.x+27} ${r.y+66}h91a21 21 0 0 0 0-42 31 31 0 0 0-59-6 24 24 0 0 0-32 23 13 13 0 0 0 0 25Z"/><text class="node-label" x="${r.x+74}" y="${r.y+48}" text-anchor="middle">${n.label}</text><text class="node-sub" x="${r.x+74}" y="${r.y+66}" text-anchor="middle">${n.sub}</text>`;
- else g.innerHTML=`<rect class="node-box" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="10"/><text class="node-label" x="${r.x+12}" y="${r.y+23}">${n.label}</text><text class="node-sub" x="${r.x+12}" y="${r.y+41}">${n.sub}</text>`;
- g.addEventListener('click',()=>selectCb(n.id));g.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();selectCb(n.id)}});nodesG.append(g)});svg.append(nodesG);
- // GPIO labels live beside the MCU pin ends.
- edges.filter(e=>e.to==='esp32'||e.from==='esp32').forEach(e=>{const node=byId.get(e.from==='esp32'?e.to:e.from),p=pos.esp32;let x,y;if(e.to==='esp32'){y=p.y+40+(inputs.findIndex(n=>n.id===e.from)-2.5)*23;x=p.x-28}else{y=p.y+p.h/2+(outs.findIndex(n=>n.id===e.to)-2)*21;x=p.x+p.w+9}const t=document.createElementNS(NS,'text');t.setAttribute('class','gpio-label');t.setAttribute('x',x);t.setAttribute('y',y-4);t.textContent=node.sub.replace(/^GPIO /,'G');svg.append(t)});
- root.append(svg);let selectCb=()=>{};const timers=new Set();function pulse(id,ms=650){const n=svg.querySelector(`[data-id="${CSS.escape(id)}"]`);if(n){n.classList.add('pulsing');const t=setTimeout(()=>{n.classList.remove('pulsing');timers.delete(t)},ms);timers.add(t);return}const p=paths.get(id);if(!p)return;p.classList.add('bright');const t=setTimeout(()=>{p.classList.remove('bright');timers.delete(t)},ms);timers.add(t);if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const dot=document.createElementNS(NS,'circle');dot.setAttribute('r','5');dot.setAttribute('class','flow-dot');const len=p.getTotalLength(),duration=Math.max(180,Math.min(1500,ms));let start;const frame=now=>{if(!start)start=now;const f=Math.min(1,(now-start)/duration),pt=p.getPointAtLength(len*f);dot.setAttribute('cx',pt.x);dot.setAttribute('cy',pt.y);if(f<1)dot._raf=requestAnimationFrame(frame);else dot.remove()};svg.append(dot);dot._raf=requestAnimationFrame(frame)}
- return {pulse,onSelect(cb){selectCb=typeof cb==='function'?cb:()=>{}},select(id){svg.querySelectorAll('.flow-node').forEach(n=>n.classList.toggle('selected',n.dataset.id===id))}};
+const NS = 'http://www.w3.org/2000/svg';
+const COLORS = { input: '#6f879a', output: '#b1784e', cloud: '#688668' };
+
+export function createFlow(root, { nodes, edges }) {
+  root.innerHTML = '';
+  root.classList.add('signal-flow');
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 1000 460');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Hungry Simon signal flow schematic');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.innerHTML = `<defs>
+    <filter id="flowGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="flowArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 7 4 1 7" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  </defs><rect class="flow-paper" x="0" y="0" width="1000" height="460" rx="22"/>`;
+
+  const inputNodes = nodes.filter((node) => node.side === 'in');
+  const outputNodes = nodes.filter((node) => node.side === 'out' && node.id !== 'wifi');
+  const positions = new Map();
+  inputNodes.forEach((node, i) => positions.set(node.id, { x: 28, y: 57 + i * 54, w: 188, h: 42 }));
+  outputNodes.forEach((node, i) => positions.set(node.id, { x: 710, y: 62 + i * 62, w: 166, h: 46 }));
+  positions.set('esp32', { x: 382, y: 48, w: 250, h: 360 });
+  positions.set('wifi', { x: 710, y: 345, w: 166, h: 52 });
+  positions.set('webapp', { x: 875, y: 345, w: 112, h: 52 });
+
+  const inputPins = new Map(inputNodes.map((node, i) => [node.id, 78 + i * 54]));
+  const outputPins = new Map(outputNodes.map((node, i) => [node.id, 85 + i * 62]));
+  const paths = new Map();
+  const wireLayer = document.createElementNS(NS, 'g');
+  wireLayer.classList.add('flow-wires');
+
+  function addWire(edge, d, direction, dashed = false) {
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', `flow-wire flow-${direction}${dashed ? ' flow-command' : ''}`);
+    path.setAttribute('marker-end', 'url(#flowArrow)');
+    path.dataset.edge = edge.id;
+    wireLayer.append(path);
+    paths.set(edge.id, path);
+  }
+
+  edges.forEach((edge) => {
+    if (edge.to === 'esp32' && edge.from !== 'wifi') {
+      const y = inputPins.get(edge.from);
+      addWire(edge, `M216 ${y} H382`, 'input');
+    } else if (edge.from === 'esp32' && edge.to !== 'wifi') {
+      const y = outputPins.get(edge.to);
+      addWire(edge, `M632 ${y} H710`, 'output');
+    } else if (edge.id === 'esp32-wifi') {
+      addWire(edge, 'M632 371 H710', 'output');
+    } else if (edge.id === 'wifi-esp32') {
+      addWire(edge, 'M710 389 H665 V398 H632', 'input', true);
+    } else if (edge.id === 'wifi-webapp') {
+      addWire(edge, 'M876 357 H985', 'cloud');
+    } else if (edge.id === 'webapp-wifi') {
+      addWire(edge, 'M985 385 H876', 'cloud');
+    }
+  });
+  svg.append(wireLayer);
+
+  // The processor has only the pins that carry a signal in this diagram.
+  const chip = positions.get('esp32');
+  const chipGroup = document.createElementNS(NS, 'g');
+  chipGroup.classList.add('flow-chip-decoration');
+  chipGroup.innerHTML = `<rect class="chip" x="${chip.x}" y="${chip.y}" width="${chip.w}" height="${chip.h}" rx="16"/>`;
+  [...inputPins.values()].forEach((y) => chipGroup.insertAdjacentHTML('beforeend', `<path class="pin pin-left" d="M${chip.x - 10} ${y}h10"/>`));
+  [...outputPins.values(), 371, 398].forEach((y) => chipGroup.insertAdjacentHTML('beforeend', `<path class="pin pin-right" d="M${chip.x + chip.w} ${y}h10"/>`));
+  chipGroup.insertAdjacentHTML('beforeend', `<text class="chip-title" x="${chip.x + chip.w / 2}" y="${chip.y + 156}" text-anchor="middle">ESP32 · setup() · loop()</text>
+    <text class="chip-sub" x="${chip.x + chip.w / 2}" y="${chip.y + 182}" text-anchor="middle">T-Display</text>
+    <text class="chip-micro" x="${chip.x + chip.w / 2}" y="${chip.y + 221}" text-anchor="middle">READ · DECIDE · DRIVE</text>`);
+  svg.append(chipGroup);
+
+  const nodeLayer = document.createElementNS(NS, 'g');
+  nodes.forEach((node) => {
+    const box = positions.get(node.id);
+    const group = document.createElementNS(NS, 'g');
+    group.classList.add('flow-node', `side-${node.side}`);
+    group.dataset.id = node.id;
+    group.setAttribute('tabindex', '0');
+    group.setAttribute('role', 'button');
+    group.setAttribute('aria-label', `${node.label}, ${node.sub}`);
+    const sub = /^GPIO\b/.test(node.sub) ? '' : node.sub;
+
+    if (node.side === 'core') {
+      // Core artwork sits behind the separately drawn wires and pin stubs.
+      group.innerHTML = `<rect class="chip-hit" x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="16"/>`;
+    } else if (node.side === 'cloud') {
+      group.innerHTML = `<path class="cloud-shape" d="M${box.x + 12} ${box.y + 42}h82a18 18 0 0 0 0-36 24 24 0 0 0-47-2 19 19 0 0 0-28 19 11 11 0 0 0-7 19Z"/>
+        <text class="node-label cloud-label" x="${box.x + 53}" y="${box.y + 24}" text-anchor="middle">${node.label}</text>`;
+    } else {
+      const h = node.id === 'wifi' ? 52 : box.h;
+      group.innerHTML = `<rect class="node-box" x="${box.x}" y="${box.y}" width="${box.w}" height="${h}" rx="9"/>
+        <text class="node-label" x="${box.x + 12}" y="${box.y + (h === 52 ? 23 : 18)}">${node.label}</text>
+        ${sub ? `<text class="node-sub" x="${box.x + 12}" y="${box.y + (h === 52 ? 42 : 34)}">${sub}</text>` : ''}`;
+    }
+    group.addEventListener('click', () => selectCallback(node.id));
+    group.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectCallback(node.id);
+      }
+    });
+    nodeLayer.append(group);
+  });
+  svg.append(nodeLayer);
+
+  // GPIO/peripheral labels sit on the wire near the processor edge.
+  function addPill(text, x, y) {
+    const width = Math.max(42, text.length * 7.2 + 14);
+    const group = document.createElementNS(NS, 'g');
+    group.classList.add('gpio-pill');
+    group.innerHTML = `<rect x="${x - width / 2}" y="${y - 11}" width="${width}" height="22" rx="11"/><text x="${x}" y="${y + 4}" text-anchor="middle">${text}</text>`;
+    svg.append(group);
+  }
+  inputNodes.forEach((node) => addPill(node.sub.replace(/^GPIO\s*/, 'G'), 340, inputPins.get(node.id)));
+  outputNodes.forEach((node) => addPill(node.sub === 'SPI' ? 'SPI' : node.sub.replace(/^GPIO\s*/, 'G'), 676, outputPins.get(node.id)));
+  addPill('Wi-Fi', 675, 371);
+  addPill('command', 651, 398);
+
+  const legend = document.createElementNS(NS, 'g');
+  legend.classList.add('flow-legend');
+  legend.innerHTML = `<circle class="legend-input" cx="34" cy="434" r="5"/><text x="46" y="438">input</text>
+    <circle class="legend-output" cx="126" cy="434" r="5"/><text x="138" y="438">output</text>
+    <circle class="legend-cloud" cx="232" cy="434" r="5"/><text x="244" y="438">cloud</text>
+    <path class="legend-command" d="M326 434h36"/><text x="371" y="438">command from the web app</text>`;
+  svg.append(legend);
+  root.append(svg);
+
+  let selectCallback = () => {};
+  const active = new Map();
+  function pulse(id, ms = 650) {
+    const node = svg.querySelector(`[data-id="${CSS.escape(id)}"]`);
+    const path = paths.get(id);
+    const target = node || path;
+    if (!target) return;
+    target.classList.add(node ? 'pulsing' : 'bright');
+    const previous = active.get(target);
+    if (previous) {
+      clearTimeout(previous.timer);
+      if (previous.frame) cancelAnimationFrame(previous.frame);
+      previous.dot?.remove();
+    }
+    const state = { timer: null, frame: null, dot: null };
+    active.set(target, state);
+    state.timer = setTimeout(() => {
+      target.classList.remove(node ? 'pulsing' : 'bright');
+      state.dot?.remove();
+      active.delete(target);
+    }, ms);
+    if (!path || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('r', '6');
+    dot.setAttribute('class', 'flow-dot');
+    svg.append(dot);
+    state.dot = dot;
+    const length = path.getTotalLength();
+    const duration = Math.max(180, Math.min(1500, ms));
+    let started;
+    const animate = (now) => {
+      if (!active.has(target)) return;
+      if (started === undefined) started = now;
+      const fraction = Math.min(1, (now - started) / duration);
+      const point = path.getPointAtLength(length * fraction);
+      dot.setAttribute('cx', point.x);
+      dot.setAttribute('cy', point.y);
+      if (fraction < 1) state.frame = requestAnimationFrame(animate);
+    };
+    state.frame = requestAnimationFrame(animate);
+  }
+
+  return {
+    pulse,
+    onSelect(callback) { selectCallback = typeof callback === 'function' ? callback : () => {}; },
+    select(id) {
+      svg.querySelectorAll('.flow-node').forEach((node) => node.classList.toggle('selected', node.dataset.id === id));
+    },
+  };
 }

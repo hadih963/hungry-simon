@@ -1,1 +1,67 @@
-.signal-flow{width:100%;max-width:1120px;margin-inline:auto;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#1f2430}.signal-flow svg{display:block;width:100%;height:auto;overflow:visible}.flow-paper{fill:#fffaf2;stroke:#e2d5c2;stroke-width:2}.flow-wire{fill:none;stroke:#7a8188;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:.8;transition:stroke .2s,stroke-width .2s,filter .2s}.flow-wire[marker-end]{marker-end:url(#arrow)}.flow-wire.bright{stroke:#ff6a1a;stroke-width:4;filter:drop-shadow(0 0 4px #ff6a1a)}.flow-node{cursor:pointer;outline:none}.node-box{fill:#e5eff8;stroke:#1f2430;stroke-width:2}.side-out .node-box{fill:#fbe6d2}.side-cloud .cloud-shape{fill:#e1efdf;stroke:#1f2430;stroke-width:2}.node-label{font-size:14px;font-weight:800;fill:#1f2430}.node-sub{font-size:10px;fill:#59616a}.chip{fill:#263746;stroke:#1f2430;stroke-width:3}.chip-title{font-size:24px;font-weight:850;letter-spacing:1px;fill:#fff5e7}.chip-sub{font-size:13px;fill:#c9d6df}.chip-micro{font-size:10px;font-weight:700;letter-spacing:1.5px;fill:#ffb276}.pin{fill:none;stroke:#ffb276;stroke-width:5;stroke-linecap:round}.gpio-label{font-size:9px;font-weight:700;fill:#59616a}.flow-node:hover .node-box,.flow-node:focus-visible .node-box,.flow-node:hover .chip,.flow-node:focus-visible .chip,.flow-node:hover .cloud-shape,.flow-node:focus-visible .cloud-shape{stroke:#ff6a1a;stroke-width:4;filter:drop-shadow(0 0 5px #ffb276)}.flow-node.selected .node-box,.flow-node.selected .chip,.flow-node.selected .cloud-shape,.flow-node.pulsing .node-box,.flow-node.pulsing .chip,.flow-node.pulsing .cloud-shape{stroke:#ff6a1a;stroke-width:4;filter:drop-shadow(0 0 8px #ff9c57)}.flow-dot{fill:#ff6a1a;stroke:#fff4e5;stroke-width:2;filter:url(#flowGlow);pointer-events:none}@media(max-width:600px){.signal-flow svg{min-width:520px}.signal-flow{overflow-x:auto}}@media(prefers-reduced-motion:reduce){.signal-flow *{transition:none!important}}
+.signal-flow {
+  width: 100%;
+  max-width: 1000px;
+  margin-inline: auto;
+  color: #1f2430;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.signal-flow svg { display: block; width: 100%; height: auto; overflow: visible; }
+.flow-paper { fill: #fffaf2; stroke: #e2d5c2; stroke-width: 2; }
+.flow-wire {
+  fill: none;
+  stroke: #78818a;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .9;
+  transition: stroke .16s, stroke-width .16s, filter .16s;
+}
+.flow-input { stroke: #8297a7; }
+.flow-output { stroke: #b17b54; }
+.flow-cloud { stroke: #718b70; }
+.flow-command { stroke: #ff6a1a; stroke-dasharray: 6 6; }
+.flow-wire.bright { stroke: #ff6a1a; stroke-width: 4; opacity: 1; filter: drop-shadow(0 0 4px #ff6a1a); }
+
+.flow-node { cursor: pointer; outline: none; }
+.node-box { fill: #e5eff8; stroke: #1f2430; stroke-width: 1.8; }
+.side-out .node-box { fill: #fbe6d2; }
+.side-cloud .cloud-shape { fill: #e1efdf; stroke: #1f2430; stroke-width: 1.8; }
+.node-label { fill: #1f2430; font-size: 16px; font-weight: 750; }
+.node-sub { fill: #59616a; font-size: 16px; }
+.cloud-label { font-size: 16px; }
+.chip, .chip-hit { fill: #263746; stroke: #1f2430; stroke-width: 2; }
+.chip-hit { fill: transparent; pointer-events: none; }
+.chip-title { fill: #fff5e7; font-size: 17px; font-weight: 800; letter-spacing: .2px; }
+.chip-sub { fill: #d3e0e7; font-size: 13px; }
+.chip-micro { fill: #ffb276; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.pin { fill: none; stroke: #ffb276; stroke-width: 3.5; stroke-linecap: round; }
+.gpio-pill rect { fill: #fffaf2; stroke: #d9cbb8; stroke-width: 1; }
+.gpio-pill text { fill: #1f2430; font: 700 16px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.flow-legend { font-size: 16px; fill: #39414a; }
+.legend-input { fill: #8297a7; }
+.legend-output { fill: #b17b54; }
+.legend-cloud { fill: #718b70; }
+.legend-command { fill: none; stroke: #ff6a1a; stroke-width: 2; stroke-dasharray: 5 4; }
+.flow-node:hover .node-box, .flow-node:hover .chip-hit, .flow-node:hover .cloud-shape,
+.flow-node:focus-visible .node-box, .flow-node:focus-visible .chip-hit, .flow-node:focus-visible .cloud-shape,
+.flow-node.selected .node-box, .flow-node.selected .chip-hit, .flow-node.selected .cloud-shape {
+  stroke: #ff6a1a;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 5px #ffb276);
+}
+.flow-node:focus-visible .node-box, .flow-node:focus-visible .chip-hit, .flow-node:focus-visible .cloud-shape { stroke-width: 4; }
+.flow-node.pulsing .node-box, .flow-node.pulsing .chip-hit, .flow-node.pulsing .cloud-shape {
+  stroke: #ff6a1a;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 7px #ff9c57);
+}
+.flow-dot { fill: #ff6a1a; stroke: #fff4e5; stroke-width: 2; filter: url(#flowGlow); pointer-events: none; }
+
+@media (max-width: 700px) {
+  .signal-flow { overflow-x: auto; }
+  .signal-flow svg { min-width: 700px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signal-flow *, .signal-flow *::before, .signal-flow *::after { transition: none !important; }
+}
