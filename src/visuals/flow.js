@@ -1,30 +1,22 @@
-// PLACEHOLDER signal-flow diagram. GPT (Codex) replaces this file on branch gpt/visuals.
-// Contract: see AGENTS.md "Signal-flow diagram contract".
-export function createFlow(root, { nodes, edges }) {
-  root.innerHTML = '';
-  root.classList.add('flow-stub');
-  const els = new Map();
-  let selectCb = () => {};
-  for (const side of ['in', 'core', 'out', 'cloud']) {
-    const col = document.createElement('div');
-    col.className = 'flow-col';
-    nodes.filter((n) => n.side === side).forEach((n) => {
-      const b = document.createElement('button');
-      b.className = 'flow-node';
-      b.innerHTML = `<b>${n.label}</b><small>${n.sub}</small>`;
-      b.addEventListener('click', () => selectCb(n.id));
-      col.append(b);
-      els.set(n.id, b);
-    });
-    root.append(col);
-  }
-  const flash = (el, cls, ms) => { if (!el) return; el.classList.add(cls); setTimeout(() => el.classList.remove(cls), ms); };
-  return {
-    pulse(id, ms = 600) {
-      const edge = edges.find((e) => e.id === id);
-      if (edge) { flash(els.get(edge.from), 'pulse', ms); flash(els.get(edge.to), 'pulse', ms); } else flash(els.get(id), 'pulse', ms);
-    },
-    onSelect(cb) { selectCb = cb; },
-    select(id) { els.forEach((el, k) => el.classList.toggle('selected', k === id)); },
-  };
+const NS='http://www.w3.org/2000/svg';
+const palettes={in:'#e5eff8',core:'#263746',out:'#fbe6d2',cloud:'#e1efdf'};
+export function createFlow(root,{nodes,edges}){
+ root.innerHTML='';root.classList.add('signal-flow');const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 1120 490');svg.setAttribute('role','img');svg.setAttribute('aria-label','Hungry Simon signal flow schematic');svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+ svg.innerHTML=`<defs><filter id="flowGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3 0 6" fill="none" stroke="#69717a" stroke-width="1.5"/></marker></defs><rect class="flow-paper" x="0" y="0" width="1120" height="490" rx="22"/>`;
+ const byId=new Map(nodes.map(n=>[n.id,n])), pos={};const inputs=nodes.filter(n=>n.side==='in'),outs=nodes.filter(n=>n.side==='out');inputs.forEach((n,i)=>pos[n.id]={x:28,y:35+i*72,w:178,h:54});outs.forEach((n,i)=>pos[n.id]={x:775,y:45+i*77,w:178,h:54});pos.esp32={x:390,y:135,w:250,h:215};pos.webapp={x:952,y:30,w:148,h:88};
+ const route=(e)=>{const a=pos[e.from],b=pos[e.to];if(e.id==='wifi-webapp'||e.id==='webapp-wifi'){const x1=e.from==='wifi'?a.x+a.w:a.x,x2=e.to==='webapp'?b.x:b.x+b.w;const y1=a.y+a.h/2+(e.id==='webapp-wifi'?7:0),y2=b.y+b.h/2+(e.id==='webapp-wifi'?7:0);return `M${x1} ${y1} H${(x1+x2)/2} V${y2} H${x2}`}
+ if(e.from==='esp32'){const sy=a.y+a.h/2+(outs.findIndex(n=>n.id===e.to)-2)*21;return `M${a.x+a.w} ${sy} H${b.x-25} V${b.y+b.h/2} H${b.x}`}
+ if(e.to==='esp32'){const sy=a.y+a.h/2;const ty=a.y+a.h/2; const ey=b.y+40+(inputs.findIndex(n=>n.id===e.from)-2.5)*23;return `M${a.x+a.w} ${sy} H${b.x-32} V${ey} H${b.x}`}
+ return `M${a.x+a.w} ${a.y+a.h/2} H${b.x}`};
+ const edgeG=document.createElementNS(NS,'g');edgeG.classList.add('flow-wires');const paths=new Map();
+ edges.forEach(e=>{const p=document.createElementNS(NS,'path');p.setAttribute('d',route(e));p.setAttribute('class','flow-wire');p.setAttribute('marker-end','url(#arrow)');p.dataset.edge=e.id;edgeG.append(p);paths.set(e.id,p)});svg.append(edgeG);
+ const nodesG=document.createElementNS(NS,'g');nodes.forEach(n=>{const r=pos[n.id],g=document.createElementNS(NS,'g');g.classList.add('flow-node',`side-${n.side}`);g.dataset.id=n.id;g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label',`${n.label}, ${n.sub}`);
+ if(n.side==='core'){g.innerHTML=`<rect class="chip" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="15"/><text class="chip-title" x="${r.x+r.w/2}" y="${r.y+75}" text-anchor="middle">${n.label}</text><text class="chip-sub" x="${r.x+r.w/2}" y="${r.y+104}" text-anchor="middle">${n.sub}</text><text class="chip-micro" x="${r.x+r.w/2}" y="${r.y+148}" text-anchor="middle">READ  ·  DECIDE  ·  DRIVE</text>`;for(let i=0;i<6;i++){let yy=r.y+25+i*31;g.insertAdjacentHTML('beforeend',`<path class="pin" d="M${r.x-13} ${yy}h13m${r.w} 0h13"/>`)}}
+ else if(n.side==='cloud')g.innerHTML=`<path class="cloud-shape" d="M${r.x+27} ${r.y+66}h91a21 21 0 0 0 0-42 31 31 0 0 0-59-6 24 24 0 0 0-32 23 13 13 0 0 0 0 25Z"/><text class="node-label" x="${r.x+74}" y="${r.y+48}" text-anchor="middle">${n.label}</text><text class="node-sub" x="${r.x+74}" y="${r.y+66}" text-anchor="middle">${n.sub}</text>`;
+ else g.innerHTML=`<rect class="node-box" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="10"/><text class="node-label" x="${r.x+12}" y="${r.y+23}">${n.label}</text><text class="node-sub" x="${r.x+12}" y="${r.y+41}">${n.sub}</text>`;
+ g.addEventListener('click',()=>selectCb(n.id));g.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();selectCb(n.id)}});nodesG.append(g)});svg.append(nodesG);
+ // GPIO labels live beside the MCU pin ends.
+ edges.filter(e=>e.to==='esp32'||e.from==='esp32').forEach(e=>{const node=byId.get(e.from==='esp32'?e.to:e.from),p=pos.esp32;let x,y;if(e.to==='esp32'){y=p.y+40+(inputs.findIndex(n=>n.id===e.from)-2.5)*23;x=p.x-28}else{y=p.y+p.h/2+(outs.findIndex(n=>n.id===e.to)-2)*21;x=p.x+p.w+9}const t=document.createElementNS(NS,'text');t.setAttribute('class','gpio-label');t.setAttribute('x',x);t.setAttribute('y',y-4);t.textContent=node.sub.replace(/^GPIO /,'G');svg.append(t)});
+ root.append(svg);let selectCb=()=>{};const timers=new Set();function pulse(id,ms=650){const n=svg.querySelector(`[data-id="${CSS.escape(id)}"]`);if(n){n.classList.add('pulsing');const t=setTimeout(()=>{n.classList.remove('pulsing');timers.delete(t)},ms);timers.add(t);return}const p=paths.get(id);if(!p)return;p.classList.add('bright');const t=setTimeout(()=>{p.classList.remove('bright');timers.delete(t)},ms);timers.add(t);if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const dot=document.createElementNS(NS,'circle');dot.setAttribute('r','5');dot.setAttribute('class','flow-dot');const len=p.getTotalLength(),duration=Math.max(180,Math.min(1500,ms));let start;const frame=now=>{if(!start)start=now;const f=Math.min(1,(now-start)/duration),pt=p.getPointAtLength(len*f);dot.setAttribute('cx',pt.x);dot.setAttribute('cy',pt.y);if(f<1)dot._raf=requestAnimationFrame(frame);else dot.remove()};svg.append(dot);dot._raf=requestAnimationFrame(frame)}
+ return {pulse,onSelect(cb){selectCb=typeof cb==='function'?cb:()=>{}},select(id){svg.querySelectorAll('.flow-node').forEach(n=>n.classList.toggle('selected',n.dataset.id===id))}};
 }
