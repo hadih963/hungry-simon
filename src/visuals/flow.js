@@ -19,7 +19,7 @@ export function createFlow(root, { nodes, edges }) {
   const outputNodes = nodes.filter((node) => node.side === 'out' && node.id !== 'wifi');
   const positions = new Map();
   inputNodes.forEach((node, i) => positions.set(node.id, { x: 28, y: 57 + i * 54, w: 188, h: 42 }));
-  outputNodes.forEach((node, i) => positions.set(node.id, { x: 710, y: 62 + i * 62, w: 166, h: 46 }));
+  outputNodes.forEach((node, i) => positions.set(node.id, { x: 730, y: 62 + i * 62, w: 146, h: 50 }));
   positions.set('esp32', { x: 382, y: 48, w: 250, h: 360 });
   positions.set('wifi', { x: 710, y: 345, w: 166, h: 52 });
   positions.set('webapp', { x: 875, y: 345, w: 112, h: 52 });
@@ -46,15 +46,15 @@ export function createFlow(root, { nodes, edges }) {
       addWire(edge, `M216 ${y} H382`, 'input');
     } else if (edge.from === 'esp32' && edge.to !== 'wifi') {
       const y = outputPins.get(edge.to);
-      addWire(edge, `M632 ${y} H710`, 'output');
+      addWire(edge, `M632 ${y} H730`, 'output');
     } else if (edge.id === 'esp32-wifi') {
-      addWire(edge, 'M632 371 H710', 'output');
+      addWire(edge, 'M632 356 H710', 'output');
     } else if (edge.id === 'wifi-esp32') {
-      addWire(edge, 'M710 389 H665 V398 H632', 'input', true);
+      addWire(edge, 'M710 388 H665 V398 H632', 'input', true);
     } else if (edge.id === 'wifi-webapp') {
-      addWire(edge, 'M876 357 H985', 'cloud');
+      addWire(edge, 'M876 357 H887', 'cloud');
     } else if (edge.id === 'webapp-wifi') {
-      addWire(edge, 'M985 385 H876', 'cloud');
+      addWire(edge, 'M887 385 H876', 'cloud');
     }
   });
   svg.append(wireLayer);
@@ -65,7 +65,7 @@ export function createFlow(root, { nodes, edges }) {
   chipGroup.classList.add('flow-chip-decoration');
   chipGroup.innerHTML = `<rect class="chip" x="${chip.x}" y="${chip.y}" width="${chip.w}" height="${chip.h}" rx="16"/>`;
   [...inputPins.values()].forEach((y) => chipGroup.insertAdjacentHTML('beforeend', `<path class="pin pin-left" d="M${chip.x - 10} ${y}h10"/>`));
-  [...outputPins.values(), 371, 398].forEach((y) => chipGroup.insertAdjacentHTML('beforeend', `<path class="pin pin-right" d="M${chip.x + chip.w} ${y}h10"/>`));
+  [...outputPins.values(), 356, 398].forEach((y) => chipGroup.insertAdjacentHTML('beforeend', `<path class="pin pin-right" d="M${chip.x + chip.w} ${y}h10"/>`));
   chipGroup.insertAdjacentHTML('beforeend', `<text class="chip-title" x="${chip.x + chip.w / 2}" y="${chip.y + 156}" text-anchor="middle">ESP32 · setup() · loop()</text>
     <text class="chip-sub" x="${chip.x + chip.w / 2}" y="${chip.y + 182}" text-anchor="middle">T-Display</text>
     <text class="chip-micro" x="${chip.x + chip.w / 2}" y="${chip.y + 221}" text-anchor="middle">READ · DECIDE · DRIVE</text>`);
@@ -87,12 +87,14 @@ export function createFlow(root, { nodes, edges }) {
       group.innerHTML = `<rect class="chip-hit" x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="16"/>`;
     } else if (node.side === 'cloud') {
       group.innerHTML = `<path class="cloud-shape" d="M${box.x + 12} ${box.y + 42}h82a18 18 0 0 0 0-36 24 24 0 0 0-47-2 19 19 0 0 0-28 19 11 11 0 0 0-7 19Z"/>
-        <text class="node-label cloud-label" x="${box.x + 53}" y="${box.y + 24}" text-anchor="middle">${node.label}</text>`;
+        <text class="node-label cloud-label" x="${box.x + 53}" y="${box.y + 27}" text-anchor="middle">${node.label}</text>`;
     } else {
       const h = node.id === 'wifi' ? 52 : box.h;
+      const pillHasSub = node.id === 'display';
+      const labelY = h === 52 ? box.y + 23 : box.y + (sub && !pillHasSub ? 21 : h / 2 + 5);
       group.innerHTML = `<rect class="node-box" x="${box.x}" y="${box.y}" width="${box.w}" height="${h}" rx="9"/>
-        <text class="node-label" x="${box.x + 12}" y="${box.y + (h === 52 ? 23 : 18)}">${node.label}</text>
-        ${sub ? `<text class="node-sub" x="${box.x + 12}" y="${box.y + (h === 52 ? 42 : 34)}">${sub}</text>` : ''}`;
+        <text class="node-label" x="${box.x + (sub && !pillHasSub ? 12 : box.w / 2)}" y="${labelY}" text-anchor="${sub && !pillHasSub ? 'start' : 'middle'}">${node.label}</text>
+        ${sub && !pillHasSub ? `<text class="node-sub" x="${box.x + 12}" y="${box.y + 39}" >${sub}</text>` : ''}`;
     }
     group.addEventListener('click', () => selectCallback(node.id));
     group.addEventListener('keydown', (event) => {
@@ -114,9 +116,9 @@ export function createFlow(root, { nodes, edges }) {
     svg.append(group);
   }
   inputNodes.forEach((node) => addPill(node.sub.replace(/^GPIO\s*/, 'G'), 340, inputPins.get(node.id)));
-  outputNodes.forEach((node) => addPill(node.sub === 'SPI' ? 'SPI' : node.sub.replace(/^GPIO\s*/, 'G'), 676, outputPins.get(node.id)));
-  addPill('Wi-Fi', 675, 371);
-  addPill('command', 651, 398);
+  outputNodes.forEach((node) => addPill(node.sub === 'SPI' ? 'SPI' : node.sub.replace(/^GPIO\s*/, 'G').replace(' (PWM)', ' PWM'), 681, outputPins.get(node.id)));
+  addPill('Wi-Fi ↑', 671, 356);
+  addPill('cmd ↓', 671, 388);
 
   const legend = document.createElementNS(NS, 'g');
   legend.classList.add('flow-legend');
